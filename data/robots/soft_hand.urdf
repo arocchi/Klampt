@@ -241,7 +241,7 @@ axis momenta are :
     <child link="soft_hand_invisible_wire_link"/>
     <axis xyz="0 0 1"/>
     <limit effort="100" lower="0.0" upper="1.0" velocity="100000"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_invisible_wire_link">
     <inertial>
@@ -259,7 +259,7 @@ axis momenta are :
     <child link="soft_hand_thumb_knuckle_link"/>
     <axis xyz="0 0 -1"/>
     <limit effort="100" lower="0.0" upper="1.57079632679" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_thumb_knuckle_link">
     <inertial>
@@ -287,7 +287,7 @@ axis momenta are :
     <child link="soft_hand_thumb_fake_link1"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_thumb_fake_link1">
     <inertial>
@@ -302,7 +302,7 @@ axis momenta are :
     <child link="soft_hand_thumb_proximal_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_thumb_proximal_link">
     <inertial>
@@ -329,7 +329,7 @@ axis momenta are :
     <child link="soft_hand_thumb_fake_link3"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_thumb_fake_link3">
     <inertial>
@@ -344,7 +344,7 @@ axis momenta are :
     <child link="soft_hand_thumb_distal_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_thumb_distal_link">
     <inertial>
@@ -371,7 +371,7 @@ axis momenta are :
     <child link="soft_hand_index_knuckle_link"/>
     <axis xyz="0 0 1"/>
     <limit effort="100" lower="-0.523598775598" upper="0.523598775598" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_index_knuckle_link">
     <inertial>
@@ -398,7 +398,7 @@ axis momenta are :
     <child link="soft_hand_index_fake_link1"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_index_fake_link1">
     <inertial>
@@ -413,7 +413,7 @@ axis momenta are :
     <child link="soft_hand_index_proximal_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_index_proximal_link">
     <inertial>
@@ -440,7 +440,7 @@ axis momenta are :
     <child link="soft_hand_index_fake_link2"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_index_fake_link2">
     <inertial>
@@ -455,7 +455,7 @@ axis momenta are :
     <child link="soft_hand_index_middle_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_index_middle_link">
     <inertial>
@@ -482,7 +482,7 @@ axis momenta are :
     <child link="soft_hand_index_fake_link3"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_index_fake_link3">
     <inertial>
@@ -497,7 +497,7 @@ axis momenta are :
     <child link="soft_hand_index_distal_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_index_distal_link">
     <inertial>
@@ -524,7 +524,7 @@ axis momenta are :
     <child link="soft_hand_middle_knuckle_link"/>
     <axis xyz="0 0 1"/>
     <limit effort="100" lower="-0.523598775598" upper="0.523598775598" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_middle_knuckle_link">
     <inertial>
@@ -551,7 +551,7 @@ axis momenta are :
     <child link="soft_hand_middle_fake_link1"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_middle_fake_link1">
     <inertial>
@@ -566,7 +566,7 @@ axis momenta are :
     <child link="soft_hand_middle_proximal_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_middle_proximal_link">
     <inertial>
@@ -593,7 +593,7 @@ axis momenta are :
     <child link="soft_hand_middle_fake_link2"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_middle_fake_link2">
     <inertial>
@@ -608,7 +608,7 @@ axis momenta are :
     <child link="soft_hand_middle_middle_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_middle_middle_link">
     <inertial>
@@ -635,7 +635,7 @@ axis momenta are :
     <child link="soft_hand_middle_fake_link3"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_middle_fake_link3">
     <inertial>
@@ -650,7 +650,7 @@ axis momenta are :
     <child link="soft_hand_middle_distal_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_middle_distal_link">
     <inertial>
@@ -677,7 +677,7 @@ axis momenta are :
     <child link="soft_hand_ring_knuckle_link"/>
     <axis xyz="0 0 1"/>
     <limit effort="100" lower="-0.523598775598" upper="0.523598775598" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_ring_knuckle_link">
     <inertial>
@@ -704,7 +704,7 @@ axis momenta are :
     <child link="soft_hand_ring_fake_link1"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_ring_fake_link1">
     <inertial>
@@ -719,7 +719,7 @@ axis momenta are :
     <child link="soft_hand_ring_proximal_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_ring_proximal_link">
     <inertial>
@@ -746,7 +746,7 @@ axis momenta are :
     <child link="soft_hand_ring_fake_link2"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_ring_fake_link2">
     <inertial>
@@ -761,7 +761,7 @@ axis momenta are :
     <child link="soft_hand_ring_middle_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_ring_middle_link">
     <inertial>
@@ -788,7 +788,7 @@ axis momenta are :
     <child link="soft_hand_ring_fake_link3"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_ring_fake_link3">
     <inertial>
@@ -803,7 +803,7 @@ axis momenta are :
     <child link="soft_hand_ring_distal_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_ring_distal_link">
     <inertial>
@@ -830,7 +830,7 @@ axis momenta are :
     <child link="soft_hand_little_knuckle_link"/>
     <axis xyz="0 0 1"/>
     <limit effort="100" lower="-0.523598775598" upper="0.523598775598" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_little_knuckle_link">
     <inertial>
@@ -857,7 +857,7 @@ axis momenta are :
     <child link="soft_hand_little_fake_link1"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_little_fake_link1">
     <inertial>
@@ -872,7 +872,7 @@ axis momenta are :
     <child link="soft_hand_little_proximal_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_little_proximal_link">
     <inertial>
@@ -899,7 +899,7 @@ axis momenta are :
     <child link="soft_hand_little_fake_link2"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_little_fake_link2">
     <inertial>
@@ -914,7 +914,7 @@ axis momenta are :
     <child link="soft_hand_little_middle_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_little_middle_link">
     <inertial>
@@ -941,7 +941,7 @@ axis momenta are :
     <child link="soft_hand_little_fake_link3"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_little_fake_link3">
     <inertial>
@@ -956,7 +956,7 @@ axis momenta are :
     <child link="soft_hand_little_distal_link"/>
     <axis xyz="0 -1 0"/>
     <limit effort="100" lower="0.0" upper="0.785398163397" velocity="100"/>
-    <dynamics damping="0.0" friction="0.0"/>
+    <dynamics damping="0.5" friction="0.0"/>
   </joint>
   <link name="soft_hand_little_distal_link">
     <inertial>
