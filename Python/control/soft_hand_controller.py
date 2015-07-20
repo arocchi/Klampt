@@ -18,15 +18,15 @@ class SoftHandController(BaseController):
 
         self.q_a_ref = 0.0
 
-        self.K_p = 8.0
-        self.K_d = 0.1
+        self.K_p = 3.0
+        self.K_d = 0.03
         self.K_i = 0.01
         self.q_a_int = 0.0
 
-        self.K_p_m = 1.0
+        self.K_p_m = 3.0
         self.K_d_m = 0.03
 
-        self.f_to_tau_a = 0.1 # convert cable tension into motor torque
+        self.synergy_reduction = 7.0 # convert cable tension into motor torque
 
         print "Loaded robot name is:", robot.getName()
         print "Number of Drivers:", robot.numDrivers()
@@ -84,28 +84,24 @@ class SoftHandController(BaseController):
                     joint_count = joint_count+1
 
         # loading elasticity and reduction map
-        self.R = np.array(self.u_dofs*[0.0])
+        self.R = np.array(self.u_dofs*[0.0]).T
         self.E = np.eye(self.u_dofs)
 
-        print 'a_to_n',self.a_to_n
-
         for i in xrange(robot.numDrivers()):
+            driver = robot.getDriver(i)
             _,_,finger, phalanx,fake_id = driver.getName().split('_')
-            if phalanx == "fake":
-                continue
-            elif phalanx == "wire":
-                continue
-            else:
-                u_id = self.n_to_u[i]
+            u_id = self.n_to_u[i]
+            if u_id != -1:
                 joint_position = self.paramsLoader.phalanxToJoint(finger,phalanx)
                 self.R[u_id] = self.paramsLoader.handParameters[finger][joint_position]['r']
                 self.E[u_id,u_id] = self.paramsLoader.handParameters[finger][joint_position]['e']
 
         print 'Soft Hand loaded.'
-        print 'Mimic Indices:', self.mimic
-        print 'Drivers:', self.hand
+        print 'Mimic Joint Indices:', self.mimic
+        print 'Underactuated Joint Indices:', self.hand
         print 'Joint parameters:', self.paramsLoader.handParameters
         print 'R:', self.R
+        #self.E = 20 * self.E
         print 'E:', self.E
 
     def output(self,**inputs):
@@ -117,7 +113,9 @@ class SoftHandController(BaseController):
 
         torque = np.array(self.n_dofs * [0.0])
 
-        q = np.array(api.sensedConfiguration()); q = q[self.q_to_t]
+        q = np.array(api.sensedConfiguration());
+
+        q = q[self.q_to_t]
         dq = np.array(api.sensedVelocity()); dq = dq[self.q_to_t]
 
         dq_a = dq[self.a_to_n]
@@ -128,25 +126,28 @@ class SoftHandController(BaseController):
         q_u = q[self.u_to_n]
         q_m = q[self.m_to_n]
 
-        self.q_a_ref = self.q_a_ref+0.001
+        while self.q_a_ref < 1.0:
+            self.q_a_ref = self.q_a_ref + 0.001
 
         R_E_inv_R_T_inv = 1.0 / (self.R.dot(np.linalg.inv(self.E)).dot(self.R.T))
-        sigma = q_a / (2*np.pi)
-        f_a = R_E_inv_R_T_inv * sigma
+        sigma = q_a # q_a goes from 0.0 to 1.0
+        f_a = R_E_inv_R_T_inv * sigma * self.synergy_reduction
         torque_a = self.K_p*(self.q_a_ref - q_a) \
                    + self.K_d*(0.0 - dq_a) \
                    + self.K_i*self.q_a_int \
-                   - f_a * self.f_to_tau_a
+                   - (f_a / self.synergy_reduction)
 
-        torque_u = self.R * f_a + self.E * q_u
+        torque_u = self.R.T*f_a - self.E.dot(q_u)
         torque_m = self.K_p_m*(q_u[self.m_to_u] - q_m) - self.K_d_m*dq_m
 
         torque[self.a_to_n] = torque_a
         torque[self.u_to_n] = torque_u
         torque[self.m_to_n] = torque_m
 
-        print 'q_a_ref-q_a:',self.q_a_ref-q_a
-        print 'q_m-q_u:', q_u[self.m_to_u]-q_m
+        #print 'q_u:', q_u
+        #print 'q_a_ref-q_a:',self.q_a_ref-q_a
+        #print 'q_u-q_m:', q_u[self.m_to_u]-q_m
+        #print 'tau_u:', torque_u
 
         return api.makeTorqueCommand(torque)
 
