@@ -19,6 +19,12 @@ class KlamptJointInfo(object):
             link = self.robot.getDriver(i).getName()
             parent_joint, parent_link = self.urdf.parent_map[link]
             q[i] = jntMap[parent_joint]
+            #try:
+            #   q[i] = jntMap[parent_joint]
+            #except IndexError:
+            #   print "link=", link
+            #   print "parent_joint=", parent_joint
+            #   print "jntMap:", jntMap.asdict()
         return q
 
     def klamptToJntMap(self, joints):
@@ -33,9 +39,10 @@ class KlamptJointInfo(object):
             jntMap[parent_joint] = joints[i]
         return OpenSoT.KlamptController.JntMap(jntMap)
 
+
 class HuboPlusController(BaseController):
     """A controller for the SoftHand"""
-    def __init__(self,robot):
+    def __init__(self, robot):
         self.robot = robot
         self.startTime = None
         self.realStartTime = time.time()
@@ -59,17 +66,22 @@ class HuboPlusController(BaseController):
             else:
                 self.posture = self.controller.getPosture()
                 print "Error: sensedConfiguration is empty"
+                print "Using initial posture from controller:", self.posture.asdict()
 
         t = t - self.startTime
 
         # Main loop - not CLIK
         if self.posture is not None:
             dq = self.controller.computeControl(self.posture)
-            self.posture = OpenSoT.JntMap(Counter(self.posture) + Counter(dq))
+            #print "Output:", dq.asdict()
+
+            accumulator = Counter(self.posture.asdict())
+            accumulator.update(Counter(dq.asdict()))
+            self.posture = OpenSoT.JntMap(accumulator)
+            #print "Integrated Posture:", self.posture.asdict()
 
             q_cmd = self.jntMapper.jntMapToKlampt(self.posture)
-
-            print q_cmd
+            #print "Final Command:", q_cmd
         else:
             q_cmd = np.zeros(self.robot.numDrivers())
 
