@@ -57,6 +57,7 @@ class HuboPlusController(BaseController):
                 self.posture = self.jntMapper.klamptToJntMap(q)
                 self.controller.setPosture(self.posture)
             else:
+                self.posture = self.controller.getPosture()
                 print "Error: sensedConfiguration is empty"
 
         t = t - self.startTime
