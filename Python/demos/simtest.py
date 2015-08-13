@@ -73,7 +73,7 @@ class MyGLViewer(GLRealtimeProgram):
             c = self.sim.getController(i)
             #build measurement dict
             measurements = {'t':self.sim.getTime(),'dt':self.dt}
-            mode = self.sim.getController(i).getControlType()
+            mode = c.getControlType()
             if mode == "PID":
                 measurements['qcmd'] = c.getCommandedConfig()
                 measurements['dqcmd'] = c.getCommandedVelocity()
