@@ -240,7 +240,7 @@ inline PolynomialMotionQueue* GetMotionQueue(RobotController* controller)
 {
   MyController* mc=dynamic_cast<MyController*>(controller);
   if(!mc) {
-    throw PyException("Not using the default manual override controller");
+    throw PyException("GetMotionQueue: Not using the default manual override controller");
   }
   FeedforwardController* ffc=dynamic_cast<FeedforwardController*>((RobotController*)mc->base);
   PolynomialPathController* pc=dynamic_cast<PolynomialPathController*>((RobotController*)ffc->base);
@@ -2730,7 +2730,7 @@ void SimRobotController::setTorque(const std::vector<double>& t)
   RobotController* c=sim->robotControllers[index];
   MyController* mc=dynamic_cast<MyController*>(c);
   if(!mc) {
-    throw PyException("Not using the default manual override controller");
+    throw PyException("setTorque: Not using the default manual override controller");
   }
   mc->override = true;
 }
@@ -2758,7 +2758,7 @@ void SimRobotController::setPIDCommand(const std::vector<double>& qdes,const std
   RobotController* c=sim->robotControllers[index];
   MyController* mc=dynamic_cast<MyController*>(c);
   if(!mc) {
-    throw PyException("Not using the default manual override controller");
+    throw PyException("setPIDCommand: Not using the default manual override controller");
   }
   mc->override = true;
 }
