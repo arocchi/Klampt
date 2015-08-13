@@ -41,12 +41,12 @@ class KlamptJointInfo(object):
 
 
 class HuboPlusController(BaseController):
-    """A controller for the SoftHand"""
+    """A controller for the HuboPlus"""
     def __init__(self, robot):
         self.robot = robot
         self.startTime = None
         self.realStartTime = time.time()
-        self.controller = OpenSoT.ExampleKlamptController()
+        self.sot_controller = OpenSoT.ExampleKlamptController()
         self.posture = None
         # TODO change absolute path with relative, take into account argv[0]
         self.jntMapper = KlamptJointInfo(self.robot, '/home/motion/Klampt/data/robots/huboplus/huboplus.urdf')
@@ -62,9 +62,9 @@ class HuboPlusController(BaseController):
             q = api.sensedConfiguration()
             if q is not None:
                 self.posture = self.jntMapper.klamptToJntMap(q)
-                self.controller.setPosture(self.posture)
+                self.sot_controller.setPosture(self.posture)
             else:
-                self.posture = self.controller.getPosture()
+                self.posture = self.sot_controller.getPosture()
                 print "Error: sensedConfiguration is empty"
                 print "Using initial posture from controller:", self.posture.asdict()
 
@@ -72,7 +72,7 @@ class HuboPlusController(BaseController):
 
         # Main loop - not CLIK
         if self.posture is not None:
-            dq = self.controller.computeControl(self.posture)
+            dq = self.sot_controller.computeControl(self.posture)
             #print "Output:", dq.asdict()
 
             accumulator = Counter(self.posture.asdict())
