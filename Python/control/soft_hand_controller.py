@@ -10,7 +10,7 @@ class SoftHandController(BaseController):
         self.robot = robot
         self.startTime = None
         self.realStartTime = time.time()
-        self.paramsLoader = SoftHandLoader('/home/arocchi/Klampt/data/robots/soft_hand.urdf')
+        self.paramsLoader = SoftHandLoader('/home/motion/Klampt/data/robots/soft_hand.urdf')
 
         self.hand = dict()
         self.mimic = dict()
