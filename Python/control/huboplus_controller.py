@@ -28,16 +28,18 @@ class KlamptJointInfo(object):
         return q
 
     def klamptToJntMap(self, joints):
+        print "Number of Drives:", self.robot.numDrivers()
+        print "Number of Joint:", len(joints)
         assert(joints is not None)
         assert(len(joints) == self.robot.numDrivers())
         jntMap = dict()
         for i in xrange(self.robot.numDrivers()):
             link = self.robot.getDriver(i).getName()
             parent_joint, parent_link = self.urdf.parent_map[link]
-            from IPython.core.debugger import Tracer
-            Tracer()()
+            #from IPython.core.debugger import Tracer
+            #Tracer()()
             jntMap[parent_joint] = joints[i]
-        return OpenSoT.KlamptController.JntMap(jntMap)
+        return OpenSoT.JntMap(jntMap)
 
 
 class HuboPlusController(BaseController):
@@ -46,7 +48,7 @@ class HuboPlusController(BaseController):
         self.robot = robot
         self.startTime = None
         self.realStartTime = time.time()
-        self.sot_controller = OpenSoT.ExampleKlamptController()
+        self.sot_controller = None
         self.posture = None
         # TODO change absolute path with relative, take into account argv[0]
         self.jntMapper = KlamptJointInfo(self.robot, '/home/motion/Klampt/data/robots/huboplus/huboplus.urdf')
@@ -61,9 +63,12 @@ class HuboPlusController(BaseController):
         if self.posture is None:
             q = api.sensedConfiguration()
             if q is not None:
+                if len(q) == 0:
+                    return
                 self.posture = self.jntMapper.klamptToJntMap(q)
-                self.sot_controller.setPosture(self.posture)
+                self.sot_controller = OpenSoT.ExampleKlamptController(self.posture)
             else:
+                self.sot_controller = OpenSoT.ExampleKlamptController()
                 self.posture = self.sot_controller.getPosture()
                 print "Error: sensedConfiguration is empty"
                 print "Using initial posture from controller:", self.posture.asdict()
