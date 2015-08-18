@@ -8,10 +8,18 @@ import pYTask
 import ExampleKlamptController as OpenSoT
 from collections import Counter
 
+DEBUG_MODE = False
+
 class KlamptJointInfo(object):
     def __init__(self, robot_klampt, robot_urdf_path):
         self.robot = robot_klampt
         self.urdf = URDF.from_xml_file(robot_urdf_path)
+
+    def printJntMap(self):
+        for i in xrange(self.robot.numDrivers()):
+            link = self.robot.getDriver(i).getName()
+            parent_joint, parent_link = self.urdf.parent_map[link]
+            print i, ": ", link, "->", parent_joint
 
     def jntMapToKlampt(self, jntMap):
         q = np.zeros(self.robot.numDrivers())
@@ -19,17 +27,9 @@ class KlamptJointInfo(object):
             link = self.robot.getDriver(i).getName()
             parent_joint, parent_link = self.urdf.parent_map[link]
             q[i] = jntMap[parent_joint]
-            #try:
-            #   q[i] = jntMap[parent_joint]
-            #except IndexError:
-            #   print "link=", link
-            #   print "parent_joint=", parent_joint
-            #   print "jntMap:", jntMap.asdict()
         return q
 
     def klamptToJntMap(self, joints):
-        print "Number of Drives:", self.robot.numDrivers()
-        print "Number of Joint:", len(joints)
         assert(joints is not None)
         assert(len(joints) == self.robot.numDrivers())
         jntMap = dict()
@@ -64,10 +64,20 @@ class HuboPlusController(BaseController):
             q = api.sensedConfiguration()
             if q is not None:
                 if len(q) == 0:
-                    return
+                    return None
+                print "Number of Drives:", self.robot.numDrivers()
+                print "Number of Joint:", len(q)
+                print "Link to Joint map:"
+                self.jntMapper.printJntMap()
+
                 self.posture = self.jntMapper.klamptToJntMap(q)
                 self.sot_controller = OpenSoT.ExampleKlamptController(self.posture)
             else:
+                print "Number of Drives:", self.robot.numDrivers()
+                #print "Number of Joint:", len(joints)
+                print "Link to Joint map:"
+                self.jntMapper.printJntMap()
+
                 self.sot_controller = OpenSoT.ExampleKlamptController()
                 self.posture = self.sot_controller.getPosture()
                 print "Error: sensedConfiguration is empty"
@@ -78,15 +88,18 @@ class HuboPlusController(BaseController):
         # Main loop - not CLIK
         if self.posture is not None:
             dq = self.sot_controller.computeControl(self.posture)
-            #print "Output:", dq.asdict()
+            if DEBUG_MODE:
+                print "Output:", dq.asdict()
 
             accumulator = Counter(self.posture.asdict())
             accumulator.update(Counter(dq.asdict()))
             self.posture = OpenSoT.JntMap(accumulator)
-            #print "Integrated Posture:", self.posture.asdict()
+            if DEBUG_MODE:
+                print "Integrated Posture:", self.posture.asdict()
 
             q_cmd = self.jntMapper.jntMapToKlampt(self.posture)
-            #print "Final Command:", q_cmd
+            if DEBUG_MODE:
+                print "Final Command:", q_cmd
         else:
             q_cmd = np.zeros(self.robot.numDrivers())
 
