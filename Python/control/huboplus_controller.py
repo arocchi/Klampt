@@ -1,6 +1,7 @@
 from controller import *
 from klampt import *
 import time
+import os
 import numpy as np
 from urdf_parser_py.urdf import URDF
 
@@ -51,7 +52,9 @@ class HuboPlusController(BaseController):
         self.sot_controller = None
         self.posture = None
         # TODO change absolute path with relative, take into account argv[0]
-        self.jntMapper = KlamptJointInfo(self.robot, '/home/motion/Klampt/data/robots/huboplus/huboplus.urdf')
+        robURDFPath = os.path.normpath(
+            os.path.join(__file__,'../../../data/robots/huboplus/huboplus.urdf'))
+        self.jntMapper = KlamptJointInfo(self.robot, robURDFPath)
 
     def output(self,**inputs):
         api = ControllerAPI(inputs)
