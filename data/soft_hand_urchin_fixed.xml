@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+  <robot name="soft_hand" file="robots/soft_hand.urdf" rotateY="-1.57"/>
+  <rigidObject name="urchin" file="objects/urchin_5cm.obj" position="-0.22 0.0 0.1" padding="0.003"/>
+  <terrain file="terrains/plane.tri" translation="0 0 -0.05"/>
+</world>
