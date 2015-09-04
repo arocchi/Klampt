@@ -169,13 +169,13 @@ class HandSim:
         self.moving = [0,0,0,0]
         # should we apply forces on the promixal link of finger [0, 1, 2]?
         self.ext_forces = [False, False, False]
-        self.EXT_F = [0.0, 0.0, 10.0]
-        self.EXT_F_DISP = [0.0, 0.05, 0.0]
+        self.EXT_F = [0.0, 0.0, -150.0]
+        self.EXT_F_DISP = [0.025, 0.00, 0.0]
 
         self.update_tendon_lengths()
         print "Reflex Hand Simulation initialized"
-        print "  Initial setpoint",self.setpoint
-        print "  Rest tendon lengths:",self.tendon_lengths
+        print "  Initial setpoint", self.setpoint
+        print "  Rest tendon lengths:", self.tendon_lengths
         #attachment points of proximal / distal joints,
         #relative to center of mass frames
         self.tendon1_local = [0.035,0,0.009]
@@ -211,6 +211,7 @@ class HandSim:
         self.tendon_lengths[0] = max(0,1.0-pulls[0]*pullscale)*0.0215
         self.tendon_lengths[1] = max(0,1.0-pulls[1]*pullscale)*0.0215
         self.tendon_lengths[2] = max(0,1.0-pulls[2]*pullscale)*0.0215
+
     def controlLoop(self,dt):
         for i in range(4):
             speed = 2
@@ -234,7 +235,7 @@ class HandSim:
         self.model.setCommand(self.setpoint)
         self.update_tendon_lengths()
         for i in range(3):
-            if self.ext_forces[0]:
+            if self.ext_forces[i]:
                 self.apply_external_forces(self.model.proximal_links[i])
             self.apply_tendon_forces(self.model.proximal_links[i],self.model.distal_links[i],self.tendon_lengths[i])
 
@@ -254,7 +255,8 @@ class HandSim:
         if d > rest_length:
             #apply tendon force
             direction = vectorops.unit(vectorops.sub(p2w,p1w))
-            f = tendon_c2*(d - rest_length)**2+tendon_c1*(d - rest_length)
+            #f = tendon_c2*(d - rest_length)**2+tendon_c1*(d - rest_length)
+            f = tendon_c2*(d - rest_length)+tendon_c1*(d - rest_length)
             #print "d",d,"rest length",rest_length,"force",f
             print "f=",f
             b1.applyForceAtPoint(vectorops.mul(direction,f),p1w)
@@ -295,7 +297,7 @@ class HandSimGLViewer(GLRealtimeProgram):
                 glColor3f(0,1,0)
                 b = self.sim.getBody(self.handsim.model.robot.getLink(self.handsim.model.proximal_links[i]))
                 glVertex3f(*se3.apply(b.getTransform(),self.handsim.EXT_F_DISP))
-                glVertex3f(*se3.apply(b.getTransform(),[f/10.0 for f in self.handsim.EXT_F]))
+                glVertex3f(*se3.apply(b.getTransform(),[self.handsim.EXT_F_DISP[i] -f/25.0 for i,f in enumerate(self.handsim.EXT_F)]))
 
         glEnd()
         glLineWidth(1)
