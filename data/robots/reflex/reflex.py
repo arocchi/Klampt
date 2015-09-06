@@ -298,7 +298,6 @@ class HandSimGLViewer(GLRealtimeProgram):
                 b = self.sim.getBody(self.handsim.model.robot.getLink(self.handsim.model.proximal_links[i]))
                 glVertex3f(*se3.apply(b.getTransform(),self.handsim.EXT_F_DISP))
                 glVertex3f(*se3.apply(b.getTransform(),[self.handsim.EXT_F_DISP[i] -f/25.0 for i,f in enumerate(self.handsim.EXT_F)]))
-
         glEnd()
         glLineWidth(1)
         glEnable(GL_DEPTH_TEST)
@@ -396,7 +395,7 @@ if __name__=='__main__':
         world_file = klampt_model_name_abs
 
     if not world.readFile(world_file):
-        print "Could not load Reflex hand from",klampt_model_name
+        print "Could not load Reflex hand from", world_file
         exit(1)
     sim = Simulator(world)
     handsim = HandSim(sim,world)

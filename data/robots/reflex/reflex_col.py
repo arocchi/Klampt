@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from klampt import se3,vectorops
 from klampt import *
 from klampt.glprogram import *
@@ -5,7 +7,7 @@ from klampt.glprogram import *
 #The hardware name
 gripper_name = 'reflex'
 
-#The Klamp't model name
+#The Klamp't model file name
 klampt_model_name = 'reflex_col.rob'
 
 #the number of Klamp't model DOFs
@@ -173,6 +175,11 @@ class HandSim:
         self.endpoint = self.setpoint[:]
         self.force = [0,0,0,0]
         self.moving = [0,0,0,0]
+        # should we apply forces on the promixal link of finger [0, 1, 2]?
+        self.ext_forces = [False, False, False]
+        self.EXT_F = [0.0, 0.0, -150.0]
+        self.EXT_F_DISP = [0.025, 0.00, 0.0]
+
         self.update_tendon_lengths()
         print "Reflex Hand Simulation initialized"
         print "  Initial setpoint",self.setpoint
@@ -212,6 +219,7 @@ class HandSim:
         self.tendon_lengths[0] = max(0,1.0-pulls[0]*pullscale)*0.0215
         self.tendon_lengths[1] = max(0,1.0-pulls[1]*pullscale)*0.0215
         self.tendon_lengths[2] = max(0,1.0-pulls[2]*pullscale)*0.0215
+
     def controlLoop(self,dt):
         for i in range(4):
             speed = 2
@@ -235,7 +243,13 @@ class HandSim:
         self.model.setCommand(self.setpoint)
         self.update_tendon_lengths()
         for i in range(3):
+            if self.ext_forces[i]:
+                self.apply_external_forces(self.model.proximal_links[i])
             self.apply_tendon_forces(self.model.proximal_links[i],self.model.distal_links[i],self.tendon_lengths[i])
+
+    def apply_external_forces(self, link_index):
+        b = self.sim.getBody(self.model.robot.getLink(link_index))
+        b.applyForceAtLocalPoint(self.EXT_F, self.EXT_F_DISP)
 
     def apply_tendon_forces(self,link1,link2,rest_length):
         tendon_c2 = 30000.0
@@ -274,17 +288,22 @@ class HandSimGLViewer(GLRealtimeProgram):
         self.sim.updateWorld()
         self.world.drawGL()
 
-        #draw tendons
+        #draw tendons and forces
         glDisable(GL_LIGHTING)
         glDisable(GL_DEPTH_TEST)
         glLineWidth(4.0)
-        glColor3f(0,1,1)
         glBegin(GL_LINES)
         for i in range(3):
+            glColor3f(0,1,1)
             b1 = self.sim.getBody(self.handsim.model.robot.getLink(self.handsim.model.proximal_links[i]))
             b2 = self.sim.getBody(self.handsim.model.robot.getLink(self.handsim.model.distal_links[i]))
             glVertex3f(*se3.apply(b1.getTransform(),self.handsim.tendon1_local))
             glVertex3f(*se3.apply(b2.getTransform(),self.handsim.tendon2_local))
+            if self.handsim.ext_forces[i]:
+                glColor3f(0,1,0)
+                b = self.sim.getBody(self.handsim.model.robot.getLink(self.handsim.model.proximal_links[i]))
+                glVertex3f(*se3.apply(b.getTransform(),self.handsim.EXT_F_DISP))
+                glVertex3f(*se3.apply(b.getTransform(),[self.handsim.EXT_F_DISP[i] -f/25.0 for i,f in enumerate(self.handsim.EXT_F)]))
         glEnd()
         glLineWidth(1)
         glEnable(GL_DEPTH_TEST)
@@ -357,16 +376,32 @@ class HandSimGLViewer(GLRealtimeProgram):
             u = self.handsim.getCommand()
             u[3] -= 0.1
             self.handsim.setCommand(u)
+        elif c == 'n':
+            self.handsim.ext_forces[0] = not self.handsim.ext_forces[0]
+        elif c == 'm':
+            self.handsim.ext_forces[1] = not self.handsim.ext_forces[1]
+        elif c == ',':
+            self.handsim.ext_forces[2] = not self.handsim.ext_forces[2]
+
         glutPostRedisplay()
 
 
 
         
 if __name__=='__main__':
-    global klampt_model_name
     world = WorldModel()
-    if not world.readFile(klampt_model_name):
-        print "Could not load Reflex hand from",klampt_model_name
+    import sys
+    if len(sys.argv) > 1:
+        world_file = sys.argv[1]
+    else:
+        import os
+        klampt_model_name_abs = os.path.normpath(
+            os.path.join(os.path.dirname(__file__),
+                         klampt_model_name))
+        world_file = klampt_model_name_abs
+
+    if not world.readFile(world_file):
+        print "Could not load Reflex hand from", world_file
         exit(1)
     sim = Simulator(world)
     handsim = HandSim(sim,world)

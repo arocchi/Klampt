@@ -2,7 +2,7 @@ mesh "urchin.stl"
 geomscale 0.1 0.1 0.1
 mass 1
 autoMass
-kStiffness 10000
-kDamping 3000
+kStiffness 100000
+kDamping 30000
 kRestitution 0
 

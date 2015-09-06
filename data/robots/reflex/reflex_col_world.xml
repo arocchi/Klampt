@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <world>
-  <robot name="RobotiQ 3-Finger Adaptive Gripper" file="reflex_stiff.rob" />
+  <robot name="RobotiQ 3-Finger Adaptive Gripper" file="reflex_col.rob" />
 
 
   <rigidObject name="urchin" file="../../objects/urchin_5cm.obj"  position="0.02 0.0 0.2">
