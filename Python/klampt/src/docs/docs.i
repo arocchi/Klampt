@@ -211,6 +211,10 @@ Frees the data associated with this geometry, if standalone. ";
 Returns the type of geometry: TriangleMesh, PointCloud, or
 GeometricPrimitive ";
 
+%feature("docstring")  Geometry3D::empty "bool Geometry3D::empty()
+
+Returns true if this has no contents. ";
+
 %feature("docstring")  Geometry3D::getTriangleMesh "TriangleMesh
 Geometry3D::getTriangleMesh()
 
@@ -424,6 +428,20 @@ Sets the active degrees of freedom. ";
 IKSolver::getActiveDofs(std::vector< int > &out)
 
 Gets the active degrees of freedom. ";
+
+%feature("docstring")  IKSolver::setJointLimits "void
+IKSolver::setJointLimits(const std::vector< double > &qmin, const
+std::vector< double > &qmax)
+
+Sets limits on the robot's configuration. If empty, this turns off
+joint limits. ";
+
+%feature("docstring")  IKSolver::getJointLimits "void
+IKSolver::getJointLimits(std::vector< double > &out, std::vector<
+double > &out2)
+
+Gets the limits on the robot's configuration (by default this is the
+robot's joint limits. ";
 
 %feature("docstring")  IKSolver::getResidual "void
 IKSolver::getResidual(std::vector< double > &out)
@@ -735,20 +753,40 @@ RobotModel::getName() ";
 %feature("docstring")  RobotModel::numLinks "int
 RobotModel::numLinks() ";
 
-%feature("docstring")  RobotModel::getLink "RobotModelLink
-RobotModel::getLink(int index) ";
+%feature("docstring")  RobotModel::link "RobotModelLink
+RobotModel::link(int index) ";
+
+%feature("docstring")  RobotModel::link "RobotModelLink
+RobotModel::link(const char *name) ";
 
 %feature("docstring")  RobotModel::getLink "RobotModelLink
-RobotModel::getLink(const char *name) ";
+RobotModel::getLink(int index)
+
+Old-style: will be deprecated. ";
+
+%feature("docstring")  RobotModel::getLink "RobotModelLink
+RobotModel::getLink(const char *name)
+
+Old-style: will be deprecated. ";
 
 %feature("docstring")  RobotModel::numDrivers "int
 RobotModel::numDrivers() ";
 
-%feature("docstring")  RobotModel::getDriver "RobotModelDriver
-RobotModel::getDriver(int index) ";
+%feature("docstring")  RobotModel::driver "RobotModelDriver
+RobotModel::driver(int index) ";
+
+%feature("docstring")  RobotModel::driver "RobotModelDriver
+RobotModel::driver(const char *name) ";
 
 %feature("docstring")  RobotModel::getDriver "RobotModelDriver
-RobotModel::getDriver(const char *name) ";
+RobotModel::getDriver(int index)
+
+Old-style: will be deprecated. ";
+
+%feature("docstring")  RobotModel::getDriver "RobotModelDriver
+RobotModel::getDriver(const char *name)
+
+Old-style: will be deprecated. ";
 
 %feature("docstring")  RobotModel::getConfig "void
 RobotModel::getConfig(std::vector< double > &out) ";
@@ -857,6 +895,9 @@ C++ includes: robotmodel.h ";
 %feature("docstring")  RobotModelDriver::getName "const char *
 RobotModelDriver::getName() ";
 
+%feature("docstring")  RobotModelDriver::robot "RobotModel
+RobotModelDriver::robot() ";
+
 %feature("docstring")  RobotModelDriver::getRobot "RobotModel
 RobotModelDriver::getRobot() ";
 
@@ -922,6 +963,9 @@ RobotModelLink::getID() ";
 
 %feature("docstring")  RobotModelLink::getName "const char *
 RobotModelLink::getName() ";
+
+%feature("docstring")  RobotModelLink::robot "RobotModel
+RobotModelLink::robot() ";
 
 %feature("docstring")  RobotModelLink::getRobot "RobotModel
 RobotModelLink::getRobot() ";
@@ -1182,17 +1226,27 @@ SimRobotController::getSensedVelocity(std::vector< double > &out)
 
 Returns the current \"sensed\" velocity from the simulator. ";
 
-%feature("docstring")  SimRobotController::getSensor "SimRobotSensor
-SimRobotController::getSensor(int index)
+%feature("docstring")  SimRobotController::sensor "SimRobotSensor
+SimRobotController::sensor(int index)
 
 Returns a sensor by index. If out of bounds, a null sensor is
 returned. ";
 
-%feature("docstring")  SimRobotController::getNamedSensor "SimRobotSensor SimRobotController::getNamedSensor(const std::string
-&name)
+%feature("docstring")  SimRobotController::sensor "SimRobotSensor
+SimRobotController::sensor(const char *name)
 
 Returns a sensor by name. If unavailable, a null sensor is returned.
 ";
+
+%feature("docstring")  SimRobotController::getSensor "SimRobotSensor
+SimRobotController::getSensor(int index)
+
+Old-style: will be deprecated. ";
+
+%feature("docstring")  SimRobotController::getNamedSensor "SimRobotSensor SimRobotController::getNamedSensor(const std::string
+&name)
+
+Old-style: will be deprecated. ";
 
 %feature("docstring")  SimRobotController::commands "std::vector<
 std::string > SimRobotController::commands()
@@ -1373,7 +1427,7 @@ Resets to the initial state (same as setState(initialState)) ";
 %feature("docstring")  Simulator::getWorld "WorldModel
 Simulator::getWorld() const
 
-Returns the associated world model. ";
+Old-style: will be deprecated. ";
 
 %feature("docstring")  Simulator::getState "string
 Simulator::getState()
@@ -1486,22 +1540,47 @@ Simulator::meanContactForce(int aid, int bid, double out[3])
 Returns the average contact force on object a over the last simulate()
 call ";
 
-%feature("docstring")  Simulator::getController "SimRobotController
-Simulator::getController(int robot)
+%feature("docstring")  Simulator::controller "SimRobotController
+Simulator::controller(int robot)
 
 Returns a controller for the indicated robot. ";
 
+%feature("docstring")  Simulator::controller "SimRobotController
+Simulator::controller(const RobotModel &robot) ";
+
+%feature("docstring")  Simulator::body "SimBody Simulator::body(const
+RobotModelLink &link) ";
+
+%feature("docstring")  Simulator::body "SimBody Simulator::body(const
+RigidObjectModel &object) ";
+
+%feature("docstring")  Simulator::body "SimBody Simulator::body(const
+TerrainModel &terrain) ";
+
 %feature("docstring")  Simulator::getController "SimRobotController
-Simulator::getController(const RobotModel &robot) ";
+Simulator::getController(int robot)
+
+Old-style: will be deprecated. ";
+
+%feature("docstring")  Simulator::getController "SimRobotController
+Simulator::getController(const RobotModel &robot)
+
+Old-style: will be deprecated. ";
 
 %feature("docstring")  Simulator::getBody "SimBody
-Simulator::getBody(const RobotModelLink &link) ";
+Simulator::getBody(const RobotModelLink &link)
+
+Old-style: will be deprecated. ";
 
 %feature("docstring")  Simulator::getBody "SimBody
-Simulator::getBody(const RigidObjectModel &object) ";
+Simulator::getBody(const RigidObjectModel &object)
+
+Old-style: will be deprecated. ";
 
 %feature("docstring")  Simulator::getBody "SimBody
-Simulator::getBody(const TerrainModel &terrain) ";
+Simulator::getBody(const TerrainModel &terrain)
+
+Old-style: will be deprecated. ";
 
 %feature("docstring")  Simulator::getJointForces "void
 Simulator::getJointForces(const RobotModelLink &link, double out[6])
