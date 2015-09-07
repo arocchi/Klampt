@@ -19,6 +19,10 @@
 #define TEST_READ_WRITE_STATE 0
 #define DO_TIMING 0
 
+#define USE_SUBSAMPLING false
+#define USE_K_MEANS     true
+#define USE_CLUSTERING  false
+
 const static size_t gMaxKMeansSize = 5000;
 const static size_t gMaxHClusterSize = 2000;
 static size_t gPreclusterContacts = 0;
@@ -599,7 +603,7 @@ void ClusterContacts(vector<dContactGeom>& contacts,int maxClusters,Real cluster
   gPreclusterContacts += contacts.size();
 
   //for really big contact sets, do a subsampling
-  if(contacts.size()*maxClusters > gMaxKMeansSize && contacts.size()*contacts.size() > gMaxHClusterSize) {
+  if(USE_SUBSAMPLING && (contacts.size()*maxClusters > gMaxKMeansSize && contacts.size()*contacts.size() > gMaxHClusterSize)) {
     int minsize = Max((int)gMaxKMeansSize/maxClusters,(int)Sqrt(Real(gMaxHClusterSize)));
     printf("ClusterContacts: subsampling %d to %d contacts\n",(int)contacts.size(),minsize);
     //subsample
@@ -611,12 +615,20 @@ void ClusterContacts(vector<dContactGeom>& contacts,int maxClusters,Real cluster
       subcontacts[i] = contacts[subsample[i]];
     swap(subcontacts,contacts);
   }
-  size_t hclusterSize = contacts.size()*contacts.size();
-  size_t kmeansSize = contacts.size()*maxClusters;
-  if(hclusterSize < gMaxHClusterSize)
-    ClusterContactsMerge(contacts,maxClusters,clusterNormalScale);
-  else 
-    ClusterContactsKMeans(contacts,maxClusters,clusterNormalScale);
+  if(USE_K_MEANS && USE_CLUSTERING)
+  {
+      size_t hclusterSize = contacts.size()*contacts.size();
+      size_t kmeansSize = contacts.size()*maxClusters;
+
+      if(hclusterSize < gMaxHClusterSize)
+        ClusterContactsMerge(contacts,maxClusters,clusterNormalScale);
+      else
+        ClusterContactsKMeans(contacts,maxClusters,clusterNormalScale);
+  }
+  else if(USE_CLUSTERING)
+      ClusterContactsMerge(contacts,maxClusters,clusterNormalScale);
+  else if(USE_K_MEANS)
+      ClusterContactsKMeans(contacts,maxClusters,clusterNormalScale);
 }
 
 void MergeContacts(vector<dContactGeom>& contacts,double posTolerance,double oriTolerance)
