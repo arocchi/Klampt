@@ -68,8 +68,8 @@ void ODEGeometry::Create(AnyCollisionGeometry3D* geom,dSpaceID space,Vector3 off
     triMeshDataID = dGeomTriMeshDataCreate();
     //for some reason, ODE behaves better when it calculates its own normals
 #if defined(dDOUBLE)
-    if(USING_GIMPACT)
-      FatalError("GIMPACT doesn't work with doubles, recompile with dSINGLE");
+    //if(USING_GIMPACT)
+    //  FatalError("GIMPACT doesn't work with doubles, recompile with dSINGLE");
     //dGeomTriMeshDataBuildDouble1(triMeshDataID,verts,sizeof(dReal)*numVertComponents,numVerts,indices,numTris*3,sizeof(int)*3,normals);
     dGeomTriMeshDataBuildDouble(triMeshDataID,verts,sizeof(dReal)*numVertComponents,numVerts,indices,numTris*3,sizeof(int)*3);
 #else
