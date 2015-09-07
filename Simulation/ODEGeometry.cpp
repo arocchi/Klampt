@@ -9,7 +9,7 @@
 #include <errors.h>
 using namespace Meshing;
 
-#define USING_GIMPACT 0
+#define USING_GIMPACT 1
 
 ODEGeometry::ODEGeometry()
   :triMeshDataID(0),geomID(0),verts(NULL),indices(NULL),normals(NULL),numVerts(0),numTris(0),geometrySelfAllocated(false)

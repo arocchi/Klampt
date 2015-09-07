@@ -1,6 +1,6 @@
 .PHONY: unpack-deps deps dep-KrisLibrary dep-ode dep-glui dep-tinyxml
 
-ODECONFIG = --enable-shared --with-trimesh=opcode
+ODECONFIG = --enable-shared --with-trimesh=gimpact
 #Comment this out if you want to build ODE in single precision
 #(not recommended on Linux, may give reasonable performance on Windows)
 ODECONFIG += --enable-double-precision
