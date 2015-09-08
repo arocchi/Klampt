@@ -2145,8 +2145,10 @@ Simulator::Simulator(const WorldModel& model)
   }
 
   //TEMP: play around with auto disable of rigid objects
+  /*
   for(size_t i=0;i<sim->odesim.numObjects();i++)
     dBodySetAutoDisableFlag(sim->odesim.object(i)->body(),1);
+  */
 
   sim->WriteState(initialState);
 }
