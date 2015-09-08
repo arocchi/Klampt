@@ -1099,7 +1099,7 @@ RobotModelLink WorldModel::robotLink(const char* robotname,const char* link)
   r.world = index;
   r.robotIndex = rob.index;
   r.robotPtr = rob.robot;
-  if(rob.index < 0) 
+  if(rob.index < 0)
     return r;
   r.index = -1;
   for(size_t i=0;i<rob.robot->links.size();i++)
@@ -1576,7 +1576,7 @@ int RobotModelDriver::getAffectedLink()
 
 void RobotModelDriver::getAffectedLinks(std::vector<int>& links)
 {
-  if(index < 0) links.resize(0); 
+  if(index < 0) links.resize(0);
   else links = robotPtr->drivers[index].linkIndices;
 }
 
@@ -2311,14 +2311,24 @@ void Simulator::enableContactFeedbackAll()
     sim->EnableContactFeedback(objid,rworld.TerrainID(j));
     }
   }
+  //////////////
+  //object-object
+  for(size_t o1=0;o1<rworld.rigidObjects.size();o1++)
+  {
+      for(size_t o2=o1;o2<rworld.rigidObjects.size();o2++)
+      {
+          sim->EnableContactFeedback(rworld.RigidObjectID(o1),rworld.RigidObjectID(o2));
+      }
+  }
+  //////////////
   for(size_t r=0;r<rworld.robots.size();r++) {
     for(size_t j=0;j<rworld.robots[r].robot->links.size();j++) {
       int linkid = rworld.RobotLinkID(r,j);
-      //robot-world
+      //robot-object
       for(size_t i=0;i<rworld.rigidObjects.size();i++) {
     sim->EnableContactFeedback(rworld.RigidObjectID(i),linkid);
       }
-      //robot-object
+      //robot-world
       for(size_t i=0;i<rworld.terrains.size();i++) {
     sim->EnableContactFeedback(rworld.TerrainID(i),linkid);
       }
@@ -2527,7 +2537,7 @@ SimBody Simulator::body(const RigidObjectModel& object)
   SimBody b;
   b.body = sim->odesim.object(object.index)->body();
   b.geometry = sim->odesim.object(object.index)->triMesh();
-  return b; 
+  return b;
 }
 
 SimBody Simulator::body(const TerrainModel& terrain)
@@ -2547,7 +2557,7 @@ void Simulator::getJointForces(const RobotModelLink& link,double out[6])
   oderobot->GetLinkTransform(link.index,T);
   Vector3 mcomw = Vector3(fb.t1[0],fb.t1[1],fb.t1[2]);
   //convert moment about link's com to moment about localpos
-  //mp_w = (p-com) x f_w + mcom_w 
+  //mp_w = (p-com) x f_w + mcom_w
   Vector3 comw = T*link.robotPtr->links[link.index].com;
   Vector3 mw = cross(comw,fw) + mcomw;
   //convert to local frame
