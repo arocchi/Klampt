@@ -8,7 +8,7 @@ from klampt.glprogram import *
 gripper_name = 'reflex'
 
 #The Klamp't model file name
-klampt_model_name = 'reflex_col.rob'
+klampt_model_name = 'reflex_col_with_moving_base.rob'
 
 #the number of Klamp't model DOFs
 numDofs = 16
@@ -79,7 +79,7 @@ def commandToConfig(command):
 def configToCommand(config):
     """Given a gripper configuration for the klampt model, returns the
     closest command that corresponds to this configuration.  Essentially
-    the inverse of commandToConfig(). 
+    the inverse of commandToConfig().
     """
     #proxmin,proxmax = -0.34,2.83
     #KH:new calibration 5/24/15, doesn't go all the way up to closure
@@ -116,13 +116,13 @@ class HandModel:
         #preshape joint 3: 0=power, 1=pinch
         return ([0,0,0,0],[1,1,1,1])
     def getCommand(self):
-        preshape = self.robot.getDriver(self.preshape_driver).getValue()
+        preshape = self.robot.driver(self.preshape_driver).getValue()
         qrob = self.robot.getConfig()
         qmin,qmax = self.jointLimits
         fingers = [(qrob[self.proximal_links[i]]-qmax[i])/(qmin[i]-qmax[i]) for i in range(3)]
         return fingers+[preshape]
     def getVelocity(self):
-        preshape = self.robot.getDriver(self.preshape_driver).getVelocity()
+        preshape = self.robot.driver(self.preshape_driver).getVelocity()
         vrob = self.robot.getVelocity()
         qmin,qmax = self.jointLimits
         fingers = [(vrob[self.proximal_links[i]])/(qmin[i]-qmax[i]) for i in range(3)]
@@ -132,7 +132,7 @@ class HandModel:
         assert len(command)==4,"Reflex hand has 4 DOFS"
         [finger1,finger2,finger3,preshape] = command
         fingers = [finger1,finger2,finger3]
-        self.robot.getDriver(self.preshape_driver).setValue(preshape)
+        self.robot.driver(self.preshape_driver).setValue(preshape)
         qrob = self.robot.getConfig()
         qmin,qmax = self.jointLimits
         for i in range(3):
@@ -144,7 +144,7 @@ class HandModel:
         assert len(config)==4,"Reflex hand has 4 DOFS"
         [finger1,finger2,finger3,preshape] = vel
         fingers = [finger1,finger2,finger3]
-        self.robot.getDriver(self.preshape_driver).setVelocity(preshape)
+        self.robot.driver(self.preshape_driver).setVelocity(preshape)
         vrob = self.robot.getVelocity()
         qmin,qmax = self.jointLimits
         for i in range(3):
@@ -155,9 +155,9 @@ class HandModel:
 class HandSim:
     def __init__(self,sim,world,robotindex=0,link_offset=0,driver_offset=0):
         self.sim = sim
-        self.controller = self.sim.getController(robotindex)
+        self.controller = self.sim.controller(robotindex)
         #rubber for pad
-        pad = self.sim.getBody(world.robotLink(robotindex,link_offset+1))
+        pad = self.sim.body(world.robotLink(robotindex,link_offset+1))
         s = pad.getSurface()
         s.kFriction = 1.5
         s.kStiffness = 20000
@@ -165,7 +165,7 @@ class HandSim:
         pad.setCollisionPadding(0.005)
         fingerpads = [link_offset+5,link_offset+6,link_offset+10,link_offset+11,link_offset+14,link_offset+15]
         for l in fingerpads:
-            pad = self.sim.getBody(world.robotLink(robotindex,l))
+            pad = self.sim.body(world.robotLink(robotindex,l))
             s = pad.getSurface()
             s.kFriction = 1.5
             pad.setCollisionPadding(0.0025)
@@ -182,8 +182,8 @@ class HandSim:
 
         self.update_tendon_lengths()
         print "Reflex Hand Simulation initialized"
-        print "  Initial setpoint",self.setpoint
-        print "  Rest tendon lengths:",self.tendon_lengths
+        print "  Initial setpoint", self.setpoint
+        print "  Rest tendon lengths:", self.tendon_lengths
         #attachment points of proximal / distal joints,
         #relative to center of mass frames
         self.tendon1_local = [0.035,0,0.009]
@@ -237,7 +237,7 @@ class HandSim:
         qcmd[self.model.proximal_links[2]] = q[self.model.proximal_links[2]]
         vcmd = self.controller.getCommandedVelocity()
         self.controller.setPIDCommand(qcmd,vcmd)
-        
+
     def simLoop(self,dt):
         #apply forces associated with tendon
         self.model.setCommand(self.setpoint)
@@ -248,14 +248,14 @@ class HandSim:
             self.apply_tendon_forces(self.model.proximal_links[i],self.model.distal_links[i],self.tendon_lengths[i])
 
     def apply_external_forces(self, link_index):
-        b = self.sim.getBody(self.model.robot.getLink(link_index))
+        b = self.sim.body(self.model.robot.link(link_index))
         b.applyForceAtLocalPoint(self.EXT_F, self.EXT_F_DISP)
 
     def apply_tendon_forces(self,link1,link2,rest_length):
         tendon_c2 = 30000.0
         tendon_c1 = 100000.0
-        b1 = self.sim.getBody(self.model.robot.getLink(link1))
-        b2 = self.sim.getBody(self.model.robot.getLink(link2))
+        b1 = self.sim.body(self.model.robot.link(link1))
+        b2 = self.sim.body(self.model.robot.link(link2))
         p1w = se3.apply(b1.getTransform(),self.tendon1_local)
         p2w = se3.apply(b2.getTransform(),self.tendon2_local)
 
@@ -281,6 +281,9 @@ class HandSimGLViewer(GLRealtimeProgram):
         self.control_dt = 0.01
         self.sim_substeps = 10
 
+        #press 'c' to toggle display contact points / forces
+        self.drawContacts = False
+
     def display(self):
         #Put your display handler here
         #the current example draws the simulated world in grey and the
@@ -295,13 +298,13 @@ class HandSimGLViewer(GLRealtimeProgram):
         glBegin(GL_LINES)
         for i in range(3):
             glColor3f(0,1,1)
-            b1 = self.sim.getBody(self.handsim.model.robot.getLink(self.handsim.model.proximal_links[i]))
-            b2 = self.sim.getBody(self.handsim.model.robot.getLink(self.handsim.model.distal_links[i]))
+            b1 = self.sim.body(self.handsim.model.robot.link(self.handsim.model.proximal_links[i]))
+            b2 = self.sim.body(self.handsim.model.robot.link(self.handsim.model.distal_links[i]))
             glVertex3f(*se3.apply(b1.getTransform(),self.handsim.tendon1_local))
             glVertex3f(*se3.apply(b2.getTransform(),self.handsim.tendon2_local))
             if self.handsim.ext_forces[i]:
                 glColor3f(0,1,0)
-                b = self.sim.getBody(self.handsim.model.robot.getLink(self.handsim.model.proximal_links[i]))
+                b = self.sim.body(self.handsim.model.robot.link(self.handsim.model.proximal_links[i]))
                 glVertex3f(*se3.apply(b.getTransform(),self.handsim.EXT_F_DISP))
                 glVertex3f(*se3.apply(b.getTransform(),[self.handsim.EXT_F_DISP[i] -f/25.0 for i,f in enumerate(self.handsim.EXT_F)]))
         glEnd()
@@ -315,10 +318,36 @@ class HandSimGLViewer(GLRealtimeProgram):
         glMaterialfv(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE,[0,1,0,0.5])
         for i in xrange(self.world.numRobots()):
             r = self.world.robot(i)
-            q = self.sim.getController(i).getCommandedConfig()
+            q = self.sim.controller(i).getCommandedConfig()
             r.setConfig(q)
             r.drawGL(False)
         glDisable(GL_BLEND)
+
+        #draw contacts, if enabled
+        if self.drawContacts:
+            glDisable(GL_LIGHTING)
+            glDisable(GL_DEPTH_TEST)
+            glEnable(GL_POINT_SMOOTH)
+            glColor3f(1,1,0)
+            glLineWidth(1.0)
+            glPointSize(5.0)
+            forceLen = 0.5  #scale of forces
+            maxid = self.world.numIDs()
+            for i in xrange(maxid):
+                for j in xrange(i+1,maxid):
+                    points = self.sim.getContacts(i,j)
+                    if len(points) > 0:
+                        forces = self.sim.getContactForces(i,j)
+                        glBegin(GL_POINTS)
+                        for p in points:
+                            glVertex3f(*p[0:3])
+                        glEnd()
+                        glBegin(GL_LINES)
+                        for p,f in zip(points,forces):
+                            glVertex3f(*p[0:3])
+                            glVertex3f(*vectorops.madd(p[0:3],f,forceLen))
+                        glEnd()
+            glEnable(GL_DEPTH_TEST)
 
     def control_loop(self):
         #external control loop
@@ -382,12 +411,16 @@ class HandSimGLViewer(GLRealtimeProgram):
             self.handsim.ext_forces[1] = not self.handsim.ext_forces[1]
         elif c == ',':
             self.handsim.ext_forces[2] = not self.handsim.ext_forces[2]
+        elif c == 'c':
+            self.drawContacts = not self.drawContacts
+            if self.drawContacts:
+                self.sim.enableContactFeedbackAll()
 
         glutPostRedisplay()
 
 
 
-        
+
 if __name__=='__main__':
     world = WorldModel()
     import sys
@@ -404,7 +437,8 @@ if __name__=='__main__':
         print "Could not load Reflex hand from", world_file
         exit(1)
     sim = Simulator(world)
-    handsim = HandSim(sim,world)
+    handsim = HandSim(sim, world, 0, 6, 6)
+    #handsim = HandSim(sim, world)
     viewer = HandSimGLViewer(handsim)
     viewer.run()
 
