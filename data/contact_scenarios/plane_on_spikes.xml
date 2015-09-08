@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<world>
+
+  <robot name="tx90ball" file="../robots/tx90ball.rob" />
+  <terrain file="../terrains/plane.tri" />
+
+  <rigidObject name="spikes" file="../objects/spike_plane.obj" position="1 .2 0.2"/>
+  <rigidObject name="plane"  file="../objects/flatblock.obj" position="1 .2 0.4"/>
+
+  <simulation>
+    <globals maxContacts="20" />
+  </simulation>
+</world>
