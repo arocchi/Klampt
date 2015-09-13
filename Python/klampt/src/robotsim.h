@@ -117,6 +117,8 @@ class SimRobotController
   /// Sets a rate controller from the current commanded config to move at
   /// rate dq for time dt.
   void setVelocity(const std::vector<double>& dq,double dt);
+  /// Gets torque from joints. It is valid also for PiD controlled joints
+  void getTorque(std::vector<double>& t);
   /// Sets a torque command controller
   void setTorque(const std::vector<double>& t);
   /// Sets a PID command controller

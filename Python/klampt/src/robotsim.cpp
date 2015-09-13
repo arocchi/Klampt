@@ -2821,6 +2821,15 @@ double SimRobotController::remainingTime() const
   return mq->TimeRemaining();
 }
 
+void SimRobotController::getTorque(vector<double>& t)
+{
+    Vector qv;
+    sim->controlSimulators[index].GetActuatorTorques(qv);
+    if(!qv.empty()) {
+      t.resize(qv.n);
+      qv.getCopy(&t[0]);
+    }
+}
 
 void SimRobotController::setTorque(const std::vector<double>& t)
 {
