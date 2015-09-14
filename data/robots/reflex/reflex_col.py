@@ -266,6 +266,9 @@ class HandSimGLViewer(GLRealtimeProgram):
 
         self.simulate = AUTOMATIC_MODE
         self.auto_close = AUTOMATIC_MODE
+        self.auto_close_idle_duration = 0.5
+        self.auto_close_idle = None
+
 
         self.shaking = False
         self.num_shakes = 6 # 6 shakes, one every 0.5 secs, for 3.0 secs total
@@ -274,7 +277,7 @@ class HandSimGLViewer(GLRealtimeProgram):
         self.remaining_shakes = None
 
         self.lifting = False
-        self.lifting_duration = 5.0
+        self.lifting_duration = 5.0 + self.auto_close_idle_duration # wait for auto_close_idle before lifting
         self.lifting_timeout = None
 
         self.settling_time = 1.0
@@ -435,12 +438,14 @@ class HandSimGLViewer(GLRealtimeProgram):
         if self.lifting:
             if self.lifting_timeout is None:
                 self.lifting_timeout = self.ttotal + self.lifting_duration
+                self.auto_close_idle = self.ttotal + self.auto_close_idle_duration
 
-            w_T_base = self.handsim.model.robot.link(0).getTransform()
-            world_up = [0,0,0.2]
-            base_up = se3.apply_rotation(se3.inv(w_T_base),world_up)
-            for i in xrange(2):
-                self.x_des[i] = base_up[i]
+            if self.auto_close_idle <= self.ttotal:
+                w_T_base = self.handsim.model.robot.link(0).getTransform()
+                world_up = [0,0,0.2]
+                base_up = se3.apply_rotation(se3.inv(w_T_base),world_up)
+                for i in xrange(2):
+                    self.x_des[i] = base_up[i]
 
             if self.lifting_timeout <= self.ttotal:
                 self.lifting_timeout = None
