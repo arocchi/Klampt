@@ -4,6 +4,8 @@ from klampt import se3,vectorops
 from klampt import *
 from klampt.glprogram import *
 
+has_moving_base = True
+
 #The hardware name
 gripper_name = 'reflex'
 
@@ -154,6 +156,7 @@ class HandModel:
 
 class HandSim:
     def __init__(self,sim,world,robotindex=0,link_offset=0,driver_offset=0):
+        self.x = 6*[0.0] #floating base
         self.sim = sim
         self.controller = self.sim.controller(robotindex)
         #rubber for pad
@@ -228,6 +231,11 @@ class HandSim:
             elif self.endpoint[i] > self.setpoint[i]:
                 self.setpoint[i] = min(self.setpoint[i]+speed*dt,self.endpoint[i])
         self.model.setCommand(self.setpoint)
+        # notice this is a HACK.
+        # The reason it does work, is setCommand sets a new config for fingers before calling getConfig
+        # Using it for other joint values will cause drifting in the control loop.
+        # NOTICE how the moving base part works because the "external loop" (the control_loop in the viewer) "pins"
+        # the floating base by overwriting, before this controlLoop gets called, the value of the floating base
         q = self.model.robot.getConfig()
         qcmd = self.controller.getCommandedConfig()
         qcmd[self.model.swivel_links[0]] = q[self.model.swivel_links[0]]
@@ -235,6 +243,11 @@ class HandSim:
         qcmd[self.model.proximal_links[0]] = q[self.model.proximal_links[0]]
         qcmd[self.model.proximal_links[1]] = q[self.model.proximal_links[1]]
         qcmd[self.model.proximal_links[2]] = q[self.model.proximal_links[2]]
+
+        #if has_moving_base:
+        for i in xrange(5):
+            qcmd[i] = q[i]
+
         vcmd = self.controller.getCommandedVelocity()
         self.controller.setPIDCommand(qcmd,vcmd)
 
@@ -278,8 +291,11 @@ class HandSimGLViewer(GLRealtimeProgram):
         self.sim = handsim.sim
         self.world = handsim.world
         self.simulate = False
+        self.auto_close = False
         self.control_dt = 0.01
         self.sim_substeps = 10
+
+        self.x_des = 6*[0.0]
 
         #press 'c' to toggle display contact points / forces
         self.drawContacts = False
@@ -352,6 +368,34 @@ class HandSimGLViewer(GLRealtimeProgram):
     def control_loop(self):
         #external control loop
         #print "Time",self.sim.getTime()
+        #tau = [t for t,i in enumerate(self.handsim.controller.getTorque()) if i in self.handsim.model.proximal_links]
+        drivers = [self.handsim.model.robot.driver(d) for d in xrange(self.handsim.model.robot.numDrivers())]
+        tau_proximal = [t for i,t in enumerate(self.handsim.controller.getTorque()) if drivers[i].getAffectedLink() in self.handsim.model.proximal_links]
+        tau_distal = [t for i,t in enumerate(self.handsim.controller.getTorque()) if drivers[i].getAffectedLink() in self.handsim.model.distal_links]
+        #d_n = self.handsim.model.robot.driver(self.handsim.model.robot.link(self.handsim.model.proximal_links[0]).getName())
+        #assert(d_n.getAffectedLink() is self.handsim.model.robot.link(self.handsim.model.proximal_links[0]).getIndex())
+
+        #print tau_proximal
+        #print tau_distal
+
+        if self.auto_close:
+            if all(tau < 2 for tau in tau_proximal):
+                u = self.handsim.getCommand()
+                u = vectorops.sub(u, 0.01)
+                self.handsim.setCommand(u)
+            else:
+                self.auto_close = not self.auto_close
+                print "Automatic Closing:",self.auto_close
+
+
+        if has_moving_base:
+            q_rob = self.handsim.model.robot.getConfig()
+
+            for i in xrange(5):
+                q_rob[i] = self.x_des[i]
+
+            self.handsim.model.robot.setConfig(q_rob)
+
         return
 
     def idle(self):
@@ -373,6 +417,16 @@ class HandSimGLViewer(GLRealtimeProgram):
         if c == 's':
             self.simulate = not self.simulate
             print "Simulating:",self.simulate
+        if c=='a':
+            self.auto_close = not self.auto_close
+            print "Automatic Closing:",self.auto_close
+        if c=='d' and has_moving_base:
+            w_T_base = self.handsim.model.robot.link(0).getTransform()
+            world_up = [0,0,0.2]
+            base_up = se3.apply_rotation(se3.inv(w_T_base),world_up)
+            for i in xrange(2):
+                self.x_des[i] = base_up[i]
+            print "Lifting"
         if c=='y':
             u = self.handsim.getCommand()
             u[0] += 0.1
@@ -437,8 +491,12 @@ if __name__=='__main__':
         print "Could not load Reflex hand from", world_file
         exit(1)
     sim = Simulator(world)
-    handsim = HandSim(sim, world, 0, 6, 6)
-    #handsim = HandSim(sim, world)
+
+    if has_moving_base:
+        handsim = HandSim(sim, world, 0, 6, 6)
+    else:
+        handsim = HandSim(sim, world)
+
     viewer = HandSimGLViewer(handsim)
     viewer.run()
 
