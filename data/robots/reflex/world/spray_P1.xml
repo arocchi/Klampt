@@ -11,7 +11,7 @@
 -->
   <terrain name="floor" file="../../../terrains/plane.env"/>
   
-  <robot name="RobotiQ 3-Finger Adaptive Gripper" file="../reflex_col_with_moving_base.rob" position="-0.15 -0.02 0.07" rotateRPY="1.57 0 1.57"/>
+  <robot name="RobotiQ 3-Finger Adaptive Gripper" file="../reflex_col_with_moving_base.rob" position="-0.15 0.02 0.07" rotateRPY="-1.57 0 -1.57"/>
 
   <rigidObject name="spray_bottle" file="../../../objects/spray_bottle.obj"  position="0.0 0.0 0.00">
   </rigidObject>
@@ -58,5 +58,8 @@
    <robot index="0" body="12"> 
        <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
     </robot>-->
+    <object index="0">
+      <geometry  padding="0.001" preshrink="2" kFriction="1.5" kRestitution="0.0"/>
+    </object>
   </simulation>
 </world>
