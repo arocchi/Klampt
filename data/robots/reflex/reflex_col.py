@@ -5,6 +5,7 @@ from klampt import *
 from klampt.glprogram import *
 
 has_moving_base = True
+THRESHOLD_EFFORT = 7
 
 #The hardware name
 gripper_name = 'reflex'
@@ -45,53 +46,6 @@ commandMaximumVelocity = [1,1,1,1]
 swivel_links = [2,7]
 proximal_links = [3,8,12]
 distal_links = [4,9,13]
-
-def commandToConfig(command):
-    """Given a rethink parallel jaw gripper command vector, in the range
-    range [0] (closed) to [1] (open), returns the gripper configuration for
-    the klampt model.
-    """
-    global swivel_links,proximal_links,distal_links
-    global numDofs
-    finger1,finger2,finger3,preshape = command
-    #proxmin,proxmax = -0.34,2.83
-    #KH:new calibration 5/24/15, doesn't go all the way up to closure
-    proxmin,proxmax = -0.34,2.4
-    preshapemax = 1.5708
-    #nonlinear warp: power curve
-    q = [0.0]*numDofs
-    q[swivel_links[0]] = preshapemax*(1-preshape)
-    q[swivel_links[1]] = -preshapemax*(1-preshape)
-    fingers = [finger1,finger2,finger3]
-    for i in range(3):
-        fingers[i] = max(fingers[i],0.0)**(1.4)
-    for i in range(3):
-        q[proximal_links[i]] = proxmax+fingers[i]*(proxmin-proxmax)
-        if fingers[i] > 0.8: #in tension
-            q[distal_links[i]] = 0.24
-        else:
-            #not in tension
-            curve = max(0.0,1.0- (fingers[i] - 0.8)/0.2)
-            q[distal_links[i]] = curve*0.24
-        if q[proximal_links[i]] < 0:
-            #KH: New calibration 5/24/15, anything under 0 goes to 0
-            q[proximal_links[i]] = 0
-    return q
-
-def configToCommand(config):
-    """Given a gripper configuration for the klampt model, returns the
-    closest command that corresponds to this configuration.  Essentially
-    the inverse of commandToConfig().
-    """
-    #proxmin,proxmax = -0.34,2.83
-    #KH:new calibration 5/24/15, doesn't go all the way up to closure
-    proxmin,proxmax = -0.34,2.4
-    preshapemax = 1.5708
-    preshape = 1-(config[swivel_links[0]]-config[swivel_links[1]])*0.5/preshapemax
-    fingers = [(config[proximal_links[i]]-proxmax)/(proxmin-proxmax) for i in range(3)]
-    for i in range(3):
-        fingers[i] = fingers[i]**(1.0/1.4)
-    return fingers+[preshape]
 
 class HandModel:
     """A kinematic model of the Reflex hand"""
@@ -163,8 +117,8 @@ class HandSim:
         pad = self.sim.body(world.robotLink(robotindex,link_offset+1))
         s = pad.getSurface()
         s.kFriction = 1.5
-        s.kStiffness = 20000
-        s.kDamping = 20000
+        s.kStiffness = 600000
+        s.kDamping = 60000
         pad.setCollisionPadding(0.005)
         fingerpads = [link_offset+5,link_offset+6,link_offset+10,link_offset+11,link_offset+14,link_offset+15]
         for l in fingerpads:
@@ -217,11 +171,14 @@ class HandSim:
         qcmd = self.controller.getCommandedConfig()
         qactual = self.controller.getSensedConfig()
         pulls = [qcmd[l] - qactual[l] for l in self.model.proximal_links]
+        #print pulls
         pullscale = 0.5
+        #pullscale = 0.75
+        rubber_length = 0.0215
         self.tendon_lengths = [0,0,0]
-        self.tendon_lengths[0] = max(0,1.0-pulls[0]*pullscale)*0.0215
-        self.tendon_lengths[1] = max(0,1.0-pulls[1]*pullscale)*0.0215
-        self.tendon_lengths[2] = max(0,1.0-pulls[2]*pullscale)*0.0215
+        self.tendon_lengths[0] = max(0,1.0-pulls[0]*pullscale)*rubber_length
+        self.tendon_lengths[1] = max(0,1.0-pulls[1]*pullscale)*rubber_length
+        self.tendon_lengths[2] = max(0,1.0-pulls[2]*pullscale)*rubber_length
 
     def controlLoop(self,dt):
         for i in range(4):
@@ -379,7 +336,7 @@ class HandSimGLViewer(GLRealtimeProgram):
         #print tau_distal
 
         if self.auto_close:
-            if all(tau < 2 for tau in tau_proximal):
+            if all(tau < THRESHOLD_EFFORT for tau in tau_proximal):
                 u = self.handsim.getCommand()
                 u = vectorops.sub(u, 0.01)
                 self.handsim.setCommand(u)
