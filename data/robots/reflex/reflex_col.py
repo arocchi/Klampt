@@ -3,9 +3,21 @@
 from klampt import se3,vectorops
 from klampt import *
 from klampt.glprogram import *
+import numpy.random
+import numpy.linalg
 
 has_moving_base = True
-THRESHOLD_EFFORT = 7
+
+AUTOMATIC_MODE = True
+
+# for all experiments, use low effort (3.3). For high effort experiments, scale that value by 3/2 (as in physical exps)
+THRESHOLD_EFFORT = 3.3
+HIGH_EFFORT = THRESHOLD_EFFORT*3.0/2.0 # if effort was not .2, it was .3
+high_effort_experiments = ["heinz_P1", "heinz_P2", "heinz_P3", "hammer_P1", "hammer_P2", "hammer_P3"]
+
+# by default, move the hand by 0.05m in a random direction. If the experiment is in the custom_pert dict, use that value
+DEFAULT_SHAKING_PERT = 0.05
+custom_pert = {}
 
 #The hardware name
 gripper_name = 'reflex'
@@ -242,13 +254,43 @@ class HandSim:
             pass
 
 class HandSimGLViewer(GLRealtimeProgram):
-    def __init__(self,handsim):
+    def __init__(self, handsim, world_name = None):
         GLRealtimeProgram.__init__(self,"Reflex simulation program")
         self.handsim = handsim
         self.sim = handsim.sim
+
+        self.drivers = [self.handsim.model.robot.driver(d) for d in xrange(self.handsim.model.robot.numDrivers())]
+
         self.world = handsim.world
-        self.simulate = False
-        self.auto_close = False
+        self.world_name = world_name
+
+        self.simulate = AUTOMATIC_MODE
+        self.auto_close = AUTOMATIC_MODE
+
+        self.shaking = False
+        self.num_shakes = 6 # 6 shakes, one every 0.5 secs, for 3.0 secs total
+        self.shaking_interval = 0.5
+        self.next_shake = None
+        self.remaining_shakes = None
+
+        self.lifting = False
+        self.lifting_duration = 5.0
+        self.lifting_timeout = None
+
+        self.settling_time = 1.0
+        self.auto_start_timeout = None
+
+        self.threshold_effort = THRESHOLD_EFFORT
+
+        self.stats = {"S0":None,"S1": None, "S2": None, "S3": None}
+
+        if self.world_name is not None:
+            if self.world_name.split(".") in high_effort_experiments:
+                self.threshold_effort = HIGH_EFFORT
+
+        self.object = world.rigidObject(0)
+        self.initial_obj_com = self.getObjectGlobalCom()
+
         self.control_dt = 0.01
         self.sim_substeps = 10
 
@@ -256,6 +298,32 @@ class HandSimGLViewer(GLRealtimeProgram):
 
         #press 'c' to toggle display contact points / forces
         self.drawContacts = False
+
+    def getObjectGlobalCom(self):
+        return se3.apply(self.object.getTransform(), self.object.getMass().getCom())
+
+    def shakeObj(self):
+        print "shaking object"
+        shake_pert = DEFAULT_SHAKING_PERT
+        if self.world_name.split("_") in custom_pert.keys():
+            shake_pert = DEFAULT_SHAKING_PERT
+
+        random_dist = (numpy.random.random_sample(3) - 0.5)
+        random_dist /= numpy.linalg.norm(random_dist)
+        random_dist *= shake_pert
+
+        for i in xrange(2):
+            self.x_des[i] += random_dist[i]
+
+    def saveExperimentStatistics(self):
+        if self.world_name is not None:
+            import pickle
+            self.stats["S0"] = self.checkObjectIsGrasped()
+            f = file(self.world_name.split(".")[0]+'.pickle',"w+")
+            pickle.dump(self.stats, f)
+
+    def checkObjectIsGrasped(self):
+        return self.getObjectGlobalCom()[2] > self.initial_obj_com[2]
 
     def display(self):
         #Put your display handler here
@@ -323,26 +391,37 @@ class HandSimGLViewer(GLRealtimeProgram):
             glEnable(GL_DEPTH_TEST)
 
     def control_loop(self):
+        global AUTOMATIC_MODE
+
         #external control loop
         #print "Time",self.sim.getTime()
         #tau = [t for t,i in enumerate(self.handsim.controller.getTorque()) if i in self.handsim.model.proximal_links]
-        drivers = [self.handsim.model.robot.driver(d) for d in xrange(self.handsim.model.robot.numDrivers())]
-        tau_proximal = [t for i,t in enumerate(self.handsim.controller.getTorque()) if drivers[i].getAffectedLink() in self.handsim.model.proximal_links]
-        tau_distal = [t for i,t in enumerate(self.handsim.controller.getTorque()) if drivers[i].getAffectedLink() in self.handsim.model.distal_links]
+        tau_proximal = [t for i,t in enumerate(self.handsim.controller.getTorque()) if self.drivers[i].getAffectedLink() in self.handsim.model.proximal_links]
+        #tau_distal = [t for i,t in enumerate(self.handsim.controller.getTorque()) if drivers[i].getAffectedLink() in self.handsim.model.distal_links]
         #d_n = self.handsim.model.robot.driver(self.handsim.model.robot.link(self.handsim.model.proximal_links[0]).getName())
         #assert(d_n.getAffectedLink() is self.handsim.model.robot.link(self.handsim.model.proximal_links[0]).getIndex())
 
         #print tau_proximal
         #print tau_distal
 
+        if AUTOMATIC_MODE:
+            self.auto_start_timeout = self.ttotal + self.settling_time
+
+            if self.auto_start_timeout <= self.ttotal:
+                self.auto_close = True
+                AUTOMATIC_MODE = False
+
         if self.auto_close:
-            if all(tau < THRESHOLD_EFFORT for tau in tau_proximal):
+            if all(tau < self.threshold_effort for tau in tau_proximal):
                 u = self.handsim.getCommand()
                 u = vectorops.sub(u, 0.01)
                 self.handsim.setCommand(u)
             else:
-                self.auto_close = not self.auto_close
+                self.auto_close = False
                 print "Automatic Closing:",self.auto_close
+
+                if AUTOMATIC_MODE:
+                    self.lifting = True
 
 
         if has_moving_base:
@@ -352,6 +431,43 @@ class HandSimGLViewer(GLRealtimeProgram):
                 q_rob[i] = self.x_des[i]
 
             self.handsim.model.robot.setConfig(q_rob)
+
+        if self.lifting:
+            if self.lifting_timeout is None:
+                self.lifting_timeout = self.ttotal + self.lifting_duration
+
+            w_T_base = self.handsim.model.robot.link(0).getTransform()
+            world_up = [0,0,0.2]
+            base_up = se3.apply_rotation(se3.inv(w_T_base),world_up)
+            for i in xrange(2):
+                self.x_des[i] = base_up[i]
+
+            if self.lifting_timeout <= self.ttotal:
+                self.lifting_timeout = None
+                self.lifting = False
+                print "Lifting:", self.lifting
+
+                if AUTOMATIC_MODE:
+                    print "Object grasped:", self.checkObjectIsGrasped()
+                    self.saveExperimentStatistics()
+                    sys.exit(0)
+
+        if self.shaking:
+            if self.remaining_shakes is None:
+                self.remaining_shakes = self.num_shakes
+
+            if self.remaining_shakes > 0:
+                if self.next_shake is None:
+                    self.next_shake = self.ttotal + self.shaking_interval
+
+                if self.next_shake <= self.ttotal:
+                    self.next_shake = None
+                    self.shakeObj()
+                    self.remaining_shakes -= 1
+            else:
+                self.remaining_shakes = None
+                self.shaking = not self.shaking
+                print "Shaking:", self.shaking
 
         return
 
@@ -375,15 +491,15 @@ class HandSimGLViewer(GLRealtimeProgram):
             self.simulate = not self.simulate
             print "Simulating:",self.simulate
         if c=='a':
-            self.auto_close = not self.auto_close
-            print "Automatic Closing:",self.auto_close
+            self.auto_close = True
+            print "Automatic Closing:", self.auto_close
+            print "Threshold effort:",  self.threshold_effort
         if c=='d' and has_moving_base:
-            w_T_base = self.handsim.model.robot.link(0).getTransform()
-            world_up = [0,0,0.2]
-            base_up = se3.apply_rotation(se3.inv(w_T_base),world_up)
-            for i in xrange(2):
-                self.x_des[i] = base_up[i]
-            print "Lifting"
+            self.lifting = True
+            print "Lifting:", self.lifting
+        if c=='w':
+            self.shaking = not self.shaking
+            print "Shaking:", self.shaking
         if c=='y':
             u = self.handsim.getCommand()
             u[0] += 0.1
@@ -430,8 +546,6 @@ class HandSimGLViewer(GLRealtimeProgram):
         glutPostRedisplay()
 
 
-
-
 if __name__=='__main__':
     world = WorldModel()
     import sys
@@ -454,7 +568,7 @@ if __name__=='__main__':
     else:
         handsim = HandSim(sim, world)
 
-    viewer = HandSimGLViewer(handsim)
+    viewer = HandSimGLViewer(handsim, world_name=world_file)
     viewer.run()
 
     
