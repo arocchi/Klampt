@@ -18,7 +18,7 @@
                  0 0
                  0.8164 0 0 0 0
                 -0.8164 0 0 0 0
-                        0 0 0 0" position="-0.02 0.0 0.35" rotateRPY="3.14 0 0"/>
+                        0 0 0 0" position="-0.02 0.0 0.38" rotateRPY="3.14 0 0"/>
 
   <rigidObject name="heinz" file="../../../objects/heinz.obj"  position="0.0 0.0 0.00">
   </rigidObject>

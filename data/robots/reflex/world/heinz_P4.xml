@@ -15,7 +15,7 @@
   <robot name="RobotiQ 3-Finger Adaptive Gripper" file="../reflex_col_with_moving_base.rob"  
          position="-0.02 -0.14 0.08" rotateRPY="-1.57 0 0"/>
 
-  <rigidObject name="heinz" file="../../../objects/heinz.obj"  position="0.0 0.0 0.03">
+  <rigidObject name="heinz" file="../../../objects/heinz.obj"  position="0.0 0.0 0.00">
   </rigidObject>
 
   <simulation>

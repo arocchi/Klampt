@@ -13,7 +13,7 @@
   
   <!-- preshape for P1 is 1.3rad, wich translates to 0.52 (robot to sim is *1.5/2.5) -->
   <robot name="RobotiQ 3-Finger Adaptive Gripper" file="../reflex_col_with_moving_base.rob"  
-         position="0.0 -0.01 0.32" rotateRPY="3.14 0 1.57"/>
+         position="0.0 -0.01 0.31" rotateRPY="3.14 0 1.57"/>
 
   <rigidObject name="heinz" file="../../../objects/heinz.obj"  position="0.0 0.0 0.00">
   </rigidObject>
