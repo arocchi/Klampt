@@ -1352,6 +1352,12 @@ SimRobotController::getSensedVelocity(std::vector< double > &out)
 
 Returns the current \"sensed\" velocity from the simulator. ";
 
+%feature("docstring")  SimRobotController::getTorque "void
+SimRobotController::getTorque(std::vector< double > &out)
+
+Gets torque from joints. It is valid also for PiD controlled joints.
+";
+
 %feature("docstring")  SimRobotController::sensor "SimRobotSensor
 SimRobotController::sensor(int index)
 
