@@ -3,6 +3,7 @@
 from klampt import se3,vectorops
 from klampt import *
 from klampt.glprogram import *
+import random
 import numpy.random
 import numpy.linalg
 from simlog import *
@@ -13,10 +14,16 @@ DRAW_COMMANDED = False
 
 AUTOMATIC_MODE = True
 
-# for all experiments, use low effort (3.3). For high effort experiments, scale that value by 3/2 (as in physical exps)
-THRESHOLD_EFFORT = 3.3
+DISABLE_BLEM = False
+
+# for all experiments, use low effort. For high effort experiments, scale that value by 3/2 (as in physical exps)
+THRESHOLD_EFFORT = 2.3
 HIGH_EFFORT = THRESHOLD_EFFORT*3.0/2.0 # if effort was not .2, it was .3
 high_effort_experiments = ["heinz_P1", "heinz_P2", "heinz_P3", "hammer_P1", "hammer_P2", "hammer_P3"]
+
+# by default, do not perturb the x-y position of the object
+DEFAULT_POSE_PERT = 0.0
+#DEFAULT_POSE_PERT = 0.01
 
 # by default, move the hand by 0.05m in a random direction. If the experiment is in the custom_pert dict, use that value
 DEFAULT_SHAKING_PERT = 0.05
@@ -127,23 +134,20 @@ class HandSim:
     def __init__(self,sim,world,robotindex=0,link_offset=0,driver_offset=0):
         self.x = 6*[0.0] #floating base
         self.sim = sim
-        self.logger = SimLogger(sim,"log_reflex_state.csv","log_reflex_contact.csv",saveheader=False)
         self.controller = self.sim.controller(robotindex)
         #rubber for pad
         pad = self.sim.body(world.robotLink(robotindex,link_offset+1))
-        #s = pad.getSurface()
-        #s.kFriction = 1.5
-        #s.kStiffness = 600000
-        #s.kDamping = 60000
+        s = pad.getSurface()
+        s.kFriction = 1
+        pad.setSurface(s)
         #pad.setCollisionPadding(0.005)
-        #pad.setSurface(s)
         fingerpads = [link_offset+5,link_offset+6,link_offset+10,link_offset+11,link_offset+14,link_offset+15]
         for l in fingerpads:
             pad = self.sim.body(world.robotLink(robotindex,l))
-            #s = pad.getSurface()
-            #s.kFriction = 1.5
+            s = pad.getSurface()
+            s.kFriction = 1
+            pad.setSurface(s)
             #pad.setCollisionPadding(0.0025)
-            #pad.setSurface(s)
         self.world = world
         self.model = HandModel(world.robot(robotindex),link_offset,driver_offset)
         self.setpoint = self.model.getCommand()
@@ -164,8 +168,6 @@ class HandSim:
         #relative to center of mass frames
         self.tendon1_local = [0.035,0,0.015]
         self.tendon2_local = [-0.015,0,0.012]
-        self.logger.saveHeader(['cmd_setpoint1','cmd_setpoint2','cmd_setpoint3','cmd_setpoint4','tendon_length1','tendon_length2','tendon_length3'])
-        self.logger.saveContactHeader()
 
     def getCommand(self):
         return self.endpoint
@@ -194,7 +196,6 @@ class HandSim:
         pulls = [qcmd[l] - qactual[l] for l in self.model.proximal_links]
         #print pulls
         pullscale = 0.5
-        #pullscale = 0.75
         rubber_length = 0.0215
         self.tendon_lengths = [0,0,0]
         self.tendon_lengths[0] = max(0,1.0-pulls[0]*pullscale)*rubber_length
@@ -227,8 +228,6 @@ class HandSim:
         vcmd = self.controller.getCommandedVelocity()
         self.controller.setPIDCommand(qcmd,vcmd)
         
-        self.logger.saveStep(self.setpoint+self.tendon_lengths)
-
     def simLoop(self,dt):
         #apply forces associated with tendon
         self.model.setCommand(self.setpoint)
@@ -268,6 +267,21 @@ class HandSimGLViewer(GLRealtimeProgram):
         self.handsim = handsim
         self.sim = handsim.sim
 
+        if world_name == None:
+            self.logger = SimLogger(handsim.sim,"log_reflex_state.csv","log_reflex_contact.csv",saveheader=False)
+        else:
+            if DISABLE_BLEM:
+                fn_state = world_name.split(".")[0]+'_opcode'+'_state_log.csv'
+                fn_contact = world_name.split(".")[0]+'_opcode'+'_contact_log.csv'
+            else:
+                fn_state = world_name.split(".")[0]+'_state_log.csv'
+                fn_contact = world_name.split(".")[0]+'_contact_log.csv'
+            self.logger = SimLogger(handsim.sim,fn_state,fn_contact,saveheader=False)
+            
+        self.logger.saveHeader(['cmd_setpoint1','cmd_setpoint2','cmd_setpoint3','cmd_setpoint4','tendon_length1','tendon_length2','tendon_length3'])
+        self.logger.saveContactHeader()
+
+
         self.drivers = [self.handsim.model.robot.driver(d) for d in xrange(self.handsim.model.robot.numDrivers())]
 
         self.world = handsim.world
@@ -280,13 +294,15 @@ class HandSimGLViewer(GLRealtimeProgram):
 
 
         self.shaking = False
-        self.num_shakes = 6 # 6 shakes, one every 0.5 secs, for 3.0 secs total
-        self.shaking_interval = 0.5
+        self.num_shakes = 4 # 4 shakes, one every 0.5 secs, for 1.2 secs total
+        self.shaking_interval = 0.3
         self.next_shake = None
         self.remaining_shakes = None
+        self.dropping = None
+        self.dropping_timeout = None
 
         self.lifting = False
-        self.lifting_duration = 5.0 + self.auto_close_idle_duration # wait for auto_close_idle before lifting
+        self.lifting_duration = 3.0 + self.auto_close_idle_duration # wait for auto_close_idle before lifting
         self.lifting_timeout = None
 
         self.settling_time = 1.0
@@ -294,7 +310,7 @@ class HandSimGLViewer(GLRealtimeProgram):
 
         self.threshold_effort = THRESHOLD_EFFORT
 
-        self.stats = {"S0":None,"S1": None, "S2": None, "S3": None}
+        self.stats = {}
 
         if self.world_name is not None:
             if self.world_name.split(".") in high_effort_experiments:
@@ -328,18 +344,21 @@ class HandSimGLViewer(GLRealtimeProgram):
         random_dist *= shake_pert
 
         for i in xrange(3):
-            self.x_des[i] += random_dist[i]
+            self.handsim.base_setpoint[i] += random_dist[i]
 
     def saveExperimentStatistics(self):
         if self.world_name is not None:
             import pickle
-            self.stats["S0"] = self.checkObjectIsGrasped()
-            f = file(self.world_name.split(".")[0]+'.pickle',"w+")
+            if DISABLE_BLEM:
+                fn = self.world_name.split(".")[0]+'_opcode.pickle'
+            else:
+                fn = self.world_name.split(".")[0]+'.pickle'
+            f = file(fn,"w+")
             pickle.dump(self.stats, f)
 
     def checkObjectIsGrasped(self):
         if self.initial_obj_com is not None:
-            return self.getObjectGlobalCom()[2] > self.initial_obj_com[2]
+            return self.getObjectGlobalCom()[2] > self.initial_obj_com[2]+0.02
         return False
 
     def display(self):
@@ -415,7 +434,7 @@ class HandSimGLViewer(GLRealtimeProgram):
         #print "Time",self.sim.getTime()
 
         tau_proximal = [t for i,t in enumerate(self.handsim.sim.getActualTorques(0)) if self.drivers[i].getAffectedLink() in self.handsim.model.proximal_links]
-        #tau_distal = [t for i,t in enumerate(self.handsim.sim.getActualTorques(0)) if drivers[i].getAffectedLink() in self.handsim.model.distal_links]
+        tau_distal = [t for i,t in enumerate(self.handsim.sim.getActualTorques(0)) if self.drivers[i].getAffectedLink() in self.handsim.model.distal_links]
         #d_n = self.handsim.model.robot.driver(self.handsim.model.robot.link(self.handsim.model.proximal_links[0]).getName())
         #assert(d_n.getAffectedLink() is self.handsim.model.robot.link(self.handsim.model.proximal_links[0]).getIndex())
 
@@ -430,10 +449,19 @@ class HandSimGLViewer(GLRealtimeProgram):
                 AUTOMATIC_MODE = False
 
         if self.auto_close:
-            if all(tau < self.threshold_effort for tau in tau_proximal):
+            if all((0.75*abs(tau_p) + abs(tau_d)*2.0< self.threshold_effort) for tau_p,tau_d in zip(tau_proximal,tau_distal)):
                 u = self.handsim.getCommand()
-                u = vectorops.sub(u, 0.01)
+                u[0] -= 0.01
+                u[1] -= 0.01
+                u[2] -= 0.01
                 self.handsim.setCommand(u)
+                if u[0] < 0.1:
+                    self.auto_close = False
+                    print "Automatic Closing:",self.auto_close
+
+                    if AUTOMATIC_MODE:
+                        self.lifting = True
+
             else:
                 self.auto_close = False
                 print "Automatic Closing:",self.auto_close
@@ -469,8 +497,12 @@ class HandSimGLViewer(GLRealtimeProgram):
 
                 if AUTOMATIC_MODE:
                     print "Object grasped:", self.checkObjectIsGrasped()
+                    self.stats["Object grasped and lifted"] = self.checkObjectIsGrasped()
                     self.saveExperimentStatistics()
-                    sys.exit(0)
+                    self.shaking = True
+                    print "Stats:",self.stats
+                    if not self.stats["Object grasped and lifted"]:
+                        exit(0)
 
         if self.shaking:
             if self.remaining_shakes is None:
@@ -489,6 +521,22 @@ class HandSimGLViewer(GLRealtimeProgram):
                 self.shaking = not self.shaking
                 print "Shaking:", self.shaking
 
+                self.stats["Grasped After Shaking"] = self.checkObjectIsGrasped()
+                self.saveExperimentStatistics()
+                if not self.stats["Grasped After Shaking"]:
+                    print "Stats:",self.stats
+                    exit(0)
+                self.dropping = True
+        if self.dropping:
+            self.handsim.setCommand([1,1,1,0])
+            if self.dropping_timeout == None:
+                print "Dropping"
+                self.dropping_timeout = self.ttotal + 1.0
+            if self.ttotal > self.dropping_timeout:
+                self.stats["Dropped After Opening"] = not self.checkObjectIsGrasped()
+                self.saveExperimentStatistics()
+                print "Stats:",self.stats
+                sys.exit(0)
         return
 
     def idle(self):
@@ -498,6 +546,8 @@ class HandSimGLViewer(GLRealtimeProgram):
                 control_step = min(self.control_dt,self.dt-t)
                 self.control_loop()
                 self.handsim.controlLoop(control_step)
+                #do we want this here or in the substep?
+                self.logger.saveStep(self.handsim.setpoint+self.handsim.tendon_lengths)
                 for x in range(self.sim_substeps):
                     self.handsim.simLoop(control_step/self.sim_substeps)
                     self.sim.simulate(control_step/self.sim_substeps)
@@ -581,7 +631,15 @@ if __name__=='__main__':
     if not world.readFile(world_file):
         print "Could not load Reflex hand from", world_file
         exit(1)
-    sim = Simulator(world)
+    if DEFAULT_POSE_PERT > 0:
+        print "Perturbing object by +/-",DEFAULT_POSE_PERT*0.5
+        obj = world.rigidObject(0)
+        R,t = obj.getTransform()
+        obj.setTransform(R,vectorops.add(t,[random.uniform(-DEFAULT_POSE_PERT*0.5,DEFAULT_POSE_PERT*0.5),random.uniform(-DEFAULT_POSE_PERT*0.5,DEFAULT_POSE_PERT*0.5),0]))
+    if DISABLE_BLEM:
+        sim = Simulator(world,"no_blem")
+    else:
+        sim = Simulator(world)
 
     if has_moving_base:
         handsim = HandSim(sim, world, 0, 6, 6)
