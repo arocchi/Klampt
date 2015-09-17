@@ -19,11 +19,11 @@
 #define TEST_READ_WRITE_STATE 0
 #define DO_TIMING 0
 
-#define USE_DETERMINISTIC_SUBSAMPLE true
+#define USE_SUBSAMPLING true    // by default, deterministic subsampling
 #define USE_K_MEANS     true
 
 // values used for test
-#define USE_RANDOM_SUBSAMPLE false
+#define USE_RANDOM_SUBSAMPLING false
 #define USE_CLUSTERING  false
 #define USE_SORTING  false
 
@@ -75,13 +75,6 @@ bool TestReadWriteState(T& obj,const char* name="")
   return true;
 }
 
-
-//contact merging -- these are now handled by the contact clustering procedure
-const static bool kMergeContacts = false;
-const static Real kContactPosMergeTolerance = 3e-3;
-const static Real kContactOriMergeTolerance = 1e-1;
-
-
 ODESimulatorSettings::ODESimulatorSettings()
 {
   gravity[0] = gravity[1] = 0;
@@ -118,7 +111,7 @@ inline Real CFMFromSpring(Real timestep,Real kP,Real kD)
 
 
 
-struct ODEObject 
+struct ODEObject
 {
   bool gODEInitialized;
   ODEObject () : gODEInitialized(false) {}
@@ -126,11 +119,11 @@ struct ODEObject
     if(!gODEInitialized) {
       #ifdef dDOUBLE
       if(dCheckConfiguration("ODE_double_precision")!=1) {
-	FatalError("ODE is compiled with single precision but Klamp't is compiled with double, either reconfigure ODE with --enable-double-precision or recompile Klamp't with dDOUBLE");
+    FatalError("ODE is compiled with single precision but Klamp't is compiled with double, either reconfigure ODE with --enable-double-precision or recompile Klamp't with dDOUBLE");
       }
       #else
       if(dCheckConfiguration("ODE_single_precision")!=1) {
-	FatalError("ODE is compiled with double precision but Klamp't is compiled with single, either reconfigure ODE without --enable-double-precision or recompile Klamp't with dSINGLE");
+    FatalError("ODE is compiled with double precision but Klamp't is compiled with single, either reconfigure ODE without --enable-double-precision or recompile Klamp't with dSINGLE");
       }
       #endif
 
@@ -140,10 +133,10 @@ struct ODEObject
       gODEInitialized = true;
     }
   }
-  ~ODEObject() { 
+  ~ODEObject() {
     if(gODEInitialized) {
       printf("Closing ODE...\n");
-      dCloseODE(); 
+      dCloseODE();
     }
   }
 };
@@ -236,12 +229,12 @@ void ODESimulator::AddRobot(Robot& robot)
   for(size_t i=0;i<robot.links.size();i++)
     if(robots.back()->triMesh(i) && robots.back()->geom(i)) {
       if(robots.back()->robot.parents[i] == -1) { //treat as part of the terrain
-	dGeomSetCategoryBits(robots.back()->geom(i),0x1);
-	dGeomSetCollideBits(robots.back()->geom(i),0xffffffff ^ 0x1);
+    dGeomSetCategoryBits(robots.back()->geom(i),0x1);
+    dGeomSetCollideBits(robots.back()->geom(i),0xffffffff ^ 0x1);
       }
       else {
-	dGeomSetCategoryBits(robots.back()->geom(i),0x4);
-	dGeomSetCollideBits(robots.back()->geom(i),0xffffffff);
+    dGeomSetCategoryBits(robots.back()->geom(i),0x4);
+    dGeomSetCollideBits(robots.back()->geom(i),0xffffffff);
       }
     }
 }
@@ -286,7 +279,7 @@ void ODESimulator::Step(Real dt)
   timer.Reset();
 #endif // DO_TIMING
 
-  for(map<pair<ODEObjectID,ODEObjectID>,ODEContactList>::iterator i=contactList.begin();i!=contactList.end();i++) {  
+  for(map<pair<ODEObjectID,ODEObjectID>,ODEContactList>::iterator i=contactList.begin();i!=contactList.end();i++) {
     ODEContactList& cl=i->second;
     cl.forces.clear();
     for(size_t j=0;j<cl.feedbackIndices.size();j++) {
@@ -296,14 +289,14 @@ void ODESimulator::Step(Real dt)
       advance(cres,k);
       Vector3 temp;
       for(size_t i=0;i<cres->feedback.size();i++) {
-	CopyVector(temp,cres->feedback[i].f1);
-	cl.forces.push_back(temp);
-	/*
-	if(!cl.points.back().isValidForce(-temp)) {
-	  printf("ODESimulator: Warning, solved contact force %d %d is invalid\n",k,i);
-	  cout<<"  Force: "<<-temp<<", normal "<<cl.points.back().n<<" kFriction "<<cl.points.back().kFriction<<endl;
-	}
-	*/
+    CopyVector(temp,cres->feedback[i].f1);
+    cl.forces.push_back(temp);
+    /*
+    if(!cl.points.back().isValidForce(-temp)) {
+      printf("ODESimulator: Warning, solved contact force %d %d is invalid\n",k,i);
+      cout<<"  Force: "<<-temp<<", normal "<<cl.points.back().n<<" kFriction "<<cl.points.back().kFriction<<endl;
+    }
+    */
       }
     }
     if(!cl.feedbackIndices.empty())
@@ -349,8 +342,8 @@ struct EqualPlane
       Vector3 ax,bx;
       CopyVector(ax,a.pos);
       CopyVector(bx,b.pos);
-      return  FuzzyEquals(ax.dot(an),bx.dot(an),ptol) && 
-	FuzzyEquals(ax.dot(bn),bx.dot(bn),ptol);
+      return  FuzzyEquals(ax.dot(an),bx.dot(an),ptol) &&
+    FuzzyEquals(ax.dot(bn),bx.dot(bn),ptol);
     }
     return false;
   }
@@ -378,10 +371,10 @@ struct EqualPoint
 
 /** Two ways of merging frictionless contacts without resorting to 6D
  * wrench space
- * 1) interior points in 2D convex hull, with the projection defined 
+ * 1) interior points in 2D convex hull, with the projection defined
  *    by the contact normal
  * 2) interior points in convex cone at a single contact point (TODO)
- * 
+ *
  * If contacts have friction, the convex hull method only works when the
  * points are on the same plane.
  */
@@ -403,7 +396,7 @@ void CHContactsPlane(vector<dContactGeom>& contacts)
 
   //get the deepest contact
   size_t deepest = 0;
-  for(size_t i=1;i<contacts.size();i++) 
+  for(size_t i=1;i<contacts.size();i++)
     if(contacts[i].depth > contacts[deepest].depth) deepest=i;
 
   //make a plane
@@ -493,7 +486,7 @@ void ClusterContactsMerge(vector<dContactGeom>& contacts,int maxClusters,Real cl
     cout<<endl;
     */
     Vector mean(7,Zero);
-    for(size_t j=0;j<inds.size();j++) 
+    for(size_t j=0;j<inds.size();j++)
       mean += pts[inds[j]];
     mean /= inds.size();
 
@@ -566,15 +559,15 @@ void ClusterContactsKMeans(vector<dContactGeom>& contacts,int maxClusters,Real c
       //pick any in the cluster
       int found = -1;
       for(size_t k=0;k<kmeans.labels.size();k++) {
-	if(kmeans.labels[k] == (int)i) {
-	  found = (int)k;
-	  break;
-	}
+    if(kmeans.labels[k] == (int)i) {
+      found = (int)k;
+      break;
+    }
       }
       if(found < 0) {
-	//strange -- degenerate cluster?
-	degenerate.push_back(i);
-	continue;
+    //strange -- degenerate cluster?
+    degenerate.push_back(i);
+    continue;
       }
       contacts[i].pos[0] = pts[found][0];
       contacts[i].pos[1] = pts[found][1];
@@ -614,30 +607,31 @@ void ClusterContacts(vector<dContactGeom>& contacts,int maxClusters,Real cluster
   gPreclusterContacts += contacts.size();
 
   //for really big contact sets, do a subsampling
-  if(contacts.size()*maxClusters > gMaxKMeansSize && contacts.size()*contacts.size() > gMaxHClusterSize) {
+  if(USE_SUBSAMPLING && contacts.size()*maxClusters > gMaxKMeansSize && contacts.size()*contacts.size() > gMaxHClusterSize) {
     int minsize = Max((int)gMaxKMeansSize/maxClusters,(int)Sqrt(Real(gMaxHClusterSize)));
     printf("ClusterContacts: subsampling %d to %d contacts\n",(int)contacts.size(),minsize);
     vector<dContactGeom> subcontacts(minsize);
-    //deterministic subsample
-	if(USE_DETERMINISTIC_SUBSAMPLE}
-	{
-		for(int i=0;i<minsize;i++) {
-		  subcontacts[i] = contacts[(i*minsize)/contacts.size()];
-		}
-	    swap(subcontacts,contacts);
-	}
+
     //random subsample
-    else if(USE_RANDOM_SUBSAMPLE)
-	{
-		vector<int> subsample(contacts.size());
-		RandomPermutation(subsample);
-		subsample.resize(minsize);
-		for(size_t i=0;i<subsample.size();i++)
-		{
-		  subcontacts[i] = contacts[subsample[i]];
-		}
-	    swap(subcontacts,contacts);
+    if(USE_RANDOM_SUBSAMPLING)
+    {
+        vector<int> subsample(contacts.size());
+        RandomPermutation(subsample);
+        subsample.resize(minsize);
+        for(size_t i=0;i<subsample.size();i++)
+        {
+            subcontacts[i] = contacts[subsample[i]];
+        }
     }
+    else    // DEFAULT
+    {
+        //deterministic subsample
+        for(int i=0;i<minsize;i++) {
+            subcontacts[i] = contacts[(i*minsize)/contacts.size()];
+        }
+    }
+
+    swap(subcontacts,contacts);
 
   }
 
@@ -652,34 +646,10 @@ void ClusterContacts(vector<dContactGeom>& contacts,int maxClusters,Real cluster
     ClusterContactsMerge(contacts,maxClusters,clusterNormalScale);
   else if(USE_SORTING)
   //TEST: contact depth sorting
-	  if(contacts.size() > maxClusters) {
-		sort(contacts.begin(),contacts.end(),depthGreater);
-		contacts.resize(maxClusters);
-	  }
-}
-
-void MergeContacts(vector<dContactGeom>& contacts,double posTolerance,double oriTolerance)
-{
-  EqualPlane eq(posTolerance,oriTolerance);
-  vector<vector<int> > sets;
-  EquivalenceMap(contacts,sets,eq);
-
-  vector<dContactGeom> res;
-  vector<dContactGeom> temp;
-  for(size_t i=0;i<sets.size();i++) {
-    if(sets[i].empty()) continue;
-    temp.resize(sets[i].size());
-    for(size_t j=0;j<sets[i].size();j++)
-      temp[j] = contacts[sets[i][j]];
-    CHContactsPlane(temp);
-    //printf("CH Reduced from %d to %d\n",sets[i].size(),temp.size());
-
-    //EqualPoint eq(posTolerance);
-    //Clusterize(temp,eq);
-
-    res.insert(res.end(),temp.begin(),temp.end());
-  }
-  swap(contacts,res);
+    if(contacts.size() > maxClusters) {
+      sort(contacts.begin(),contacts.end(),depthGreater);
+      contacts.resize(maxClusters);
+    }
 }
 
 void collisionCallback(void *data, dGeomID o1, dGeomID o2)
@@ -696,7 +666,7 @@ void collisionCallback(void *data, dGeomID o1, dGeomID o2)
     return; // b2 is disabled and collides with no-body
   if( b1 && b2 && !dBodyIsEnabled(b1) && !dBodyIsEnabled(b2) )
    return; // both b1 and b2 are disabled
-  
+
   int num = dCollide (o1,o2,max_contacts,gContactTemp,sizeof(dContactGeom));
   vector<dContactGeom> vcontact(num);
   int numOk = 0;
@@ -719,7 +689,7 @@ void collisionCallback(void *data, dGeomID o1, dGeomID o2)
     numOk++;
   }
   vcontact.resize(numOk);
-  
+
   if(vcontact.size() > 0) {
     gContacts.push_back(ODEContactResult());
     gContacts.back().o1 = o1;
@@ -739,7 +709,7 @@ void selfCollisionCallback(void *data, dGeomID o1, dGeomID o2)
   if(robot->robot.selfCollisions(link1,link2)==NULL) {
     return;
   }
-  
+
   int num = dCollide (o1,o2,max_contacts,gContactTemp,sizeof(dContactGeom));
   vector<dContactGeom> vcontact(num);
   int numOk = 0;
@@ -763,16 +733,12 @@ void selfCollisionCallback(void *data, dGeomID o1, dGeomID o2)
   //TEMP: printing self collisions
   //if(numOk > 0) printf("%d self collision contacts between links %d and %d\n",numOk,(int)link1,(int)link2);
   vcontact.resize(numOk);
-  
-  if(kMergeContacts && numOk > 0) {
-    MergeContacts(vcontact,kContactPosMergeTolerance,kContactOriMergeTolerance);
-  }
 
   if(vcontact.size() > 0) {
     if(numOk != (int)vcontact.size())
-    	//// The int type is not guaranteed to be big enough, use intptr_t
-		//cout<<numOk<<" contacts between env "<<(int)dGeomGetData(o2)<<" and body "<<(int)dGeomGetData(o1)<<"  (clustered to "<<vcontact.size()<<")"<<endl;
-		cout<<numOk<<" contacts between link "<<(intptr_t)dGeomGetData(o2)<<" and link "<<(intptr_t)dGeomGetData(o1)<<"  (clustered to "<<vcontact.size()<<")"<<endl;
+        //// The int type is not guaranteed to be big enough, use intptr_t
+        //cout<<numOk<<" contacts between env "<<(int)dGeomGetData(o2)<<" and body "<<(int)dGeomGetData(o1)<<"  (clustered to "<<vcontact.size()<<")"<<endl;
+        cout<<numOk<<" contacts between link "<<(intptr_t)dGeomGetData(o2)<<" and link "<<(intptr_t)dGeomGetData(o1)<<"  (clustered to "<<vcontact.size()<<")"<<endl;
     gContacts.push_back(ODEContactResult());
     gContacts.back().o1 = o1;
     gContacts.back().o2 = o2;
@@ -782,44 +748,40 @@ void selfCollisionCallback(void *data, dGeomID o1, dGeomID o2)
 
 void ProcessContacts(list<ODEContactResult>::iterator start,list<ODEContactResult>::iterator end,const ODESimulatorSettings& settings,bool aggregateCount=true)
 {
-  if(kMergeContacts) {
-    for(list<ODEContactResult>::iterator j=start;j!=end;j++) 
-      MergeContacts(j->contacts,kContactPosMergeTolerance,kContactOriMergeTolerance);
-  }
 
   static bool warnedContacts = false;
   if(aggregateCount) {
     int numContacts = 0;
-    for(list<ODEContactResult>::iterator j=start;j!=end;j++) 
+    for(list<ODEContactResult>::iterator j=start;j!=end;j++)
       numContacts += (int)j->contacts.size();
     if(numContacts > settings.maxContacts) {
       //printf("Warning: %d robot-env contacts > maximum %d, may crash\n",numContacts,settings.maxContacts);
       if(settings.maxContacts > 50) {
-	if(!warnedContacts) {
-	  printf("Max contacts > 50, may crash.  Press enter to continue...\n");
-	  getchar();
-	}
-	warnedContacts = true;
+    if(!warnedContacts) {
+      printf("Max contacts > 50, may crash.  Press enter to continue...\n");
+      getchar();
+    }
+    warnedContacts = true;
       }
       Real scale = Real(settings.maxContacts)/numContacts;
       for(list<ODEContactResult>::iterator j=start;j!=end;j++) {
-	int n=(int)Ceil(Real(j->contacts.size())*scale);
-	//printf("Clustering %d->%d\n",j->contacts.size(),n);
-	ClusterContacts(j->contacts,n,settings.clusterNormalScale);
+    int n=(int)Ceil(Real(j->contacts.size())*scale);
+    //printf("Clustering %d->%d\n",j->contacts.size(),n);
+    ClusterContacts(j->contacts,n,settings.clusterNormalScale);
       }
     }
   }
   else {
     for(list<ODEContactResult>::iterator j=start;j!=end;j++) {
       if(settings.maxContacts > 50) {
-	if(!warnedContacts) {
-	  printf("Max contacts > 50, may crash.  Press enter to continue...\n");
-	  getchar();
-	}
-	warnedContacts = true;
+    if(!warnedContacts) {
+      printf("Max contacts > 50, may crash.  Press enter to continue...\n");
+      getchar();
+    }
+    warnedContacts = true;
       }
       for(list<ODEContactResult>::iterator j=start;j!=end;j++) {
-	ClusterContacts(j->contacts,settings.maxContacts,settings.clusterNormalScale);
+    ClusterContacts(j->contacts,settings.maxContacts,settings.clusterNormalScale);
       }
     }
   }
@@ -839,14 +801,14 @@ void ODESimulator::GetSurfaceParameters(const ODEObjectID& a,const ODEObjectID& 
   //surface.mode = 0;
   surface.bounce = 0;
   surface.bounce_vel = 0;
-  
+
   //printf("GetSurfaceParameters a = %d,%d, b = %d,%d\n",a.type,a.index,b.type,b.index);
   ODEGeometry *ma,*mb;
   if(a.type == 0) {
     Assert(a.index < (int)envs.size());
     ma = envGeoms[a.index];
   }
-  else if(a.type == 1) 
+  else if(a.type == 1)
     ma = robots[a.index]->triMesh(a.bodyIndex);
   else if(a.type == 2)
     ma = objects[a.index]->triMesh();
@@ -855,9 +817,9 @@ void ODESimulator::GetSurfaceParameters(const ODEObjectID& a,const ODEObjectID& 
     Assert(b.index < (int)envs.size());
     mb=envGeoms[b.index];
   }
-  else if(b.type == 1) 
+  else if(b.type == 1)
     mb=robots[b.index]->triMesh(b.bodyIndex);
-  else if(b.type == 2) 
+  else if(b.type == 2)
     mb=objects[b.index]->triMesh();
   else Abort();
 
@@ -892,7 +854,7 @@ void ODESimulator::SetupContactResponse(const ODEObjectID& a,const ODEObjectID& 
     Assert(contact.geom.g1 == c.o1 || contact.geom.g1 == c.o2);
     Assert(contact.geom.g2 == c.o1 || contact.geom.g2 == c.o2);
     Assert(contact.geom.depth >= 0);
-    
+
     Assert(contact.geom.g1 == c.o1);
     dJointID joint = dJointCreateContact(worldID,contactGroupID,&contact);
     dJointSetFeedback(joint,&c.feedback[k]);
@@ -929,8 +891,8 @@ void ODESimulator::SetupContactResponse(const ODEObjectID& a,const ODEObjectID& 
       checkRobot=true;
     }
     if(checkRobot) {
-      if(contactList.count(cindex) != 0) 
-	cl=&contactList[cindex];
+      if(contactList.count(cindex) != 0)
+    cl=&contactList[cindex];
     }
   }
   if(cl) {
@@ -942,7 +904,7 @@ void ODESimulator::SetupContactResponse(const ODEObjectID& a,const ODEObjectID& 
       CopyVector(cl->points[k+start].n,c.contacts[k].normal);
       cl->points[k+start].kFriction = contact.surface.mu;
       if(reverse)
-	cl->points[k+start].n.inplaceNegative();
+    cl->points[k+start].n.inplaceNegative();
     }
     Assert(feedbackIndex >= 0 && feedbackIndex < (int)gContacts.size());
     cl->feedbackIndices.push_back(feedbackIndex);
@@ -974,7 +936,7 @@ void ODESimulator::DetectCollisions()
     gContactDetectTime += timer.ElapsedTime();
     timer.Reset();
 #endif //DO_TIMING
-    
+
     ProcessContacts(gContacts.begin(),gContacts.end(),settings,false);
 
 #if DO_TIMING
@@ -989,23 +951,23 @@ void ODESimulator::DetectCollisions()
       intptr_t o1 = (intptr_t)dGeomGetData(j->o1);
       intptr_t o2 = (intptr_t)dGeomGetData(j->o2);
       if(o1 < 0) {  //it's an environment
-	cindex.first = ODEObjectID(0,(-o1-1));
+    cindex.first = ODEObjectID(0,(-o1-1));
       }
       else {
-	cindex.first = ODEObjectID(2,o1);
+    cindex.first = ODEObjectID(2,o1);
       }
       if(o2 < 0) {  //it's an environment
-	cindex.second = ODEObjectID(0,(-o2-1));
+    cindex.second = ODEObjectID(0,(-o2-1));
       }
       else {
-	cindex.second = ODEObjectID(2,o2);
+    cindex.second = ODEObjectID(2,o2);
       }
       if(o1 < 0 && o2 < 0) {
-	fprintf(stderr,"Warning, detecting terrain-terrain collisions?\n");
+    fprintf(stderr,"Warning, detecting terrain-terrain collisions?\n");
       }
       else {
-	j->feedback.resize(j->contacts.size());
-	SetupContactResponse(cindex.first,cindex.second,jcount,*j);
+    j->feedback.resize(j->contacts.size());
+    SetupContactResponse(cindex.first,cindex.second,jcount,*j);
       }
     }
   }
@@ -1019,12 +981,12 @@ void ODESimulator::DetectCollisions()
 #endif //DO_TIMING
 
     //call the collision routine between the robot and the world
-	bool gContactsEmpty = gContacts.empty();
-	list<ODEContactResult>::iterator gContactStart;
-	if(!gContactsEmpty) gContactStart = --gContacts.end();
-	dSpaceCollide2((dxGeom *)robots[i]->space(),(dxGeom *)envSpaceID,(void*)this,collisionCallback);
-	if(!gContactsEmpty) ++gContactStart;
-	else gContactStart = gContacts.begin();
+    bool gContactsEmpty = gContacts.empty();
+    list<ODEContactResult>::iterator gContactStart;
+    if(!gContactsEmpty) gContactStart = --gContacts.end();
+    dSpaceCollide2((dxGeom *)robots[i]->space(),(dxGeom *)envSpaceID,(void*)this,collisionCallback);
+    if(!gContactsEmpty) ++gContactStart;
+    else gContactStart = gContacts.begin();
 
 #if DO_TIMING
     gContactDetectTime += timer.ElapsedTime();
@@ -1042,35 +1004,35 @@ void ODESimulator::DetectCollisions()
     for(list<ODEContactResult>::iterator j=gContactStart;j!=gContacts.end();j++,jcount++) {
       bool isBodyo1 = false, isBodyo2 = false;
       for(size_t k=0;k<robots[i]->robot.links.size();k++) {
-	if(robots[i]->triMesh(k) && j->o1 == robots[i]->geom(k)) isBodyo1=true;
-	if(robots[i]->triMesh(k) && j->o2 == robots[i]->geom(k)) isBodyo2=true;
+    if(robots[i]->triMesh(k) && j->o1 == robots[i]->geom(k)) isBodyo1=true;
+    if(robots[i]->triMesh(k) && j->o2 == robots[i]->geom(k)) isBodyo2=true;
       }
       intptr_t body,obj;
       if(isBodyo2) {
-	printf("Warning, ODE collision result lists bodies in reverse order\n");
-	Assert(!isBodyo1);
-	body = (intptr_t)dGeomGetData(j->o2);
-	obj = (intptr_t)dGeomGetData(j->o1);
+    printf("Warning, ODE collision result lists bodies in reverse order\n");
+    Assert(!isBodyo1);
+    body = (intptr_t)dGeomGetData(j->o2);
+    obj = (intptr_t)dGeomGetData(j->o1);
       }
       else {
-	Assert(!isBodyo2);
-	Assert(isBodyo1);
-	body = (intptr_t)dGeomGetData(j->o1);
-	obj = (intptr_t)dGeomGetData(j->o2);
+    Assert(!isBodyo2);
+    Assert(isBodyo1);
+    body = (intptr_t)dGeomGetData(j->o1);
+    obj = (intptr_t)dGeomGetData(j->o2);
       }
       //printf("Collision between body %d and obj %d\n",body,obj);
       Assert(body >= 0 && body < (int)robots[i]->robot.links.size());
       Assert(obj >= -(int)envs.size() && obj < (int)objects.size());
       if(robots[i]->robot.parents[body] == -1 && obj < 0) { //fixed links
-	fprintf(stderr,"Warning, colliding a fixed link and the terrain\n");
-	continue;
+    fprintf(stderr,"Warning, colliding a fixed link and the terrain\n");
+    continue;
       }
       cindex.first.bodyIndex = body;
       if(obj < 0) {  //it's an environment
-	cindex.second = ODEObjectID(0,(-obj-1));
+    cindex.second = ODEObjectID(0,(-obj-1));
       }
       else {
-	cindex.second = ODEObjectID(2,obj);
+    cindex.second = ODEObjectID(2,obj);
       }
       SetupContactResponse(cindex.first,cindex.second,jcount,*j);
     }
@@ -1084,17 +1046,17 @@ void ODESimulator::DetectCollisions()
 
       cindex.second = ODEObjectID(1,i);
       gContactsEmpty = gContacts.empty();
-	  if(!gContactsEmpty) gContactStart = --gContacts.end();
+      if(!gContactsEmpty) gContactStart = --gContacts.end();
       //call the self collision routine for the robot
       dSpaceCollide(robots[i]->space(),(void*)robots[i],selfCollisionCallback);
       if(!gContactsEmpty) ++gContactStart;
-	  else gContactStart = gContacts.begin();
+      else gContactStart = gContacts.begin();
 
 #if DO_TIMING
     gContactDetectTime += timer.ElapsedTime();
     timer.Reset();
 #endif //DO_TIMING
-      
+
       ProcessContacts(gContactStart,gContacts.end(),settings);
 
 #if DO_TIMING
@@ -1104,54 +1066,54 @@ void ODESimulator::DetectCollisions()
 
       //setup the contact "joints" and contactLists
       for(list<ODEContactResult>::iterator j=gContactStart;j!=gContacts.end();j++,jcount++) {
-	intptr_t body1 = (intptr_t)dGeomGetData(j->o1);
-	intptr_t body2 = (intptr_t)dGeomGetData(j->o2);
-	//printf("Collision between body %d and body %d\n",body1,body2);
-	Assert(body1 >= 0 && body1 < (int)robots[i]->robot.links.size());
-	Assert(body2 >= 0 && body2 < (int)robots[i]->robot.links.size());
-	cindex.first.bodyIndex = body1;
-	cindex.second.bodyIndex = body2;
-	SetupContactResponse(cindex.first,cindex.second,jcount,*j);
+    intptr_t body1 = (intptr_t)dGeomGetData(j->o1);
+    intptr_t body2 = (intptr_t)dGeomGetData(j->o2);
+    //printf("Collision between body %d and body %d\n",body1,body2);
+    Assert(body1 >= 0 && body1 < (int)robots[i]->robot.links.size());
+    Assert(body2 >= 0 && body2 < (int)robots[i]->robot.links.size());
+    cindex.first.bodyIndex = body1;
+    cindex.second.bodyIndex = body2;
+    SetupContactResponse(cindex.first,cindex.second,jcount,*j);
       }
     }
 
-    if(settings.robotRobotCollisions) {    
+    if(settings.robotRobotCollisions) {
       for(size_t k=i+1;k<robots.size();k++) {
-	cindex.second = ODEObjectID(1,k);
+    cindex.second = ODEObjectID(1,k);
 
 #if DO_TIMING
     timer.Reset();
 #endif //DO_TIMING
 
-	gContactsEmpty = gContacts.empty();
-	if(!gContactsEmpty) gContactStart = --gContacts.end();
-	dSpaceCollide2((dxGeom *)robots[i]->space(),(dxGeom *)robots[k]->space(),(void*)this,collisionCallback);
-	if(!gContactsEmpty) ++gContactStart;
-	else gContactStart = gContacts.begin();
+    gContactsEmpty = gContacts.empty();
+    if(!gContactsEmpty) gContactStart = --gContacts.end();
+    dSpaceCollide2((dxGeom *)robots[i]->space(),(dxGeom *)robots[k]->space(),(void*)this,collisionCallback);
+    if(!gContactsEmpty) ++gContactStart;
+    else gContactStart = gContacts.begin();
 
 #if DO_TIMING
     gContactDetectTime += timer.ElapsedTime();
     timer.Reset();
 #endif //DO_TIMING
 
-	ProcessContacts(gContactStart,gContacts.end(),settings);
+    ProcessContacts(gContactStart,gContacts.end(),settings);
 
 #if DO_TIMING
     gClusterTime += timer.ElapsedTime();
     timer.Reset();
 #endif //DO_TIMING
 
-	//setup the contact "joints" and contactLists
-	for(list<ODEContactResult>::iterator j=gContactStart;j!=gContacts.end();j++,jcount++) {
-	  intptr_t body1 = (intptr_t)dGeomGetData(j->o1);
-	  intptr_t body2 = (intptr_t)dGeomGetData(j->o2);
-	  //printf("Collision between robot %d and robot %d\n",i,k);
-	  Assert(body1 >= 0 && body1 < (int)robots[i]->robot.links.size());
-	  Assert(body2 >= 0 && body2 < (int)robots[k]->robot.links.size());
-	  cindex.first.bodyIndex = body1;
-	  cindex.second.bodyIndex = body2;
-	  SetupContactResponse(cindex.first,cindex.second,jcount,*j);
-	}
+    //setup the contact "joints" and contactLists
+    for(list<ODEContactResult>::iterator j=gContactStart;j!=gContacts.end();j++,jcount++) {
+      intptr_t body1 = (intptr_t)dGeomGetData(j->o1);
+      intptr_t body2 = (intptr_t)dGeomGetData(j->o2);
+      //printf("Collision between robot %d and robot %d\n",i,k);
+      Assert(body1 >= 0 && body1 < (int)robots[i]->robot.links.size());
+      Assert(body2 >= 0 && body2 < (int)robots[k]->robot.links.size());
+      cindex.first.bodyIndex = body1;
+      cindex.second.bodyIndex = body2;
+      SetupContactResponse(cindex.first,cindex.second,jcount,*j);
+    }
       }
     }
   }
@@ -1214,15 +1176,15 @@ void GetContacts(dBodyID a,vector<ODEContactList>& contacts)
       contacts.back().points.resize(i->contacts.size());
       contacts.back().forces.resize(i->feedback.size());
       for(size_t j=0;j<i->feedback.size();j++) {
-	CopyVector(contacts.back().forces[j],i->feedback[j].f1);
-	CopyVector(contacts.back().points[j].x,i->contacts[j].pos);
-	CopyVector(contacts.back().points[j].n,i->contacts[j].normal);
-	//contacts.back().points[j].kFriction = i->contacts[j].surface.mu;
-	contacts.back().points[j].kFriction = 0;
-	if(reverse) {
-	  contacts.back().forces[j].inplaceNegative();
-	  contacts.back().points[j].n.inplaceNegative();
-	}
+    CopyVector(contacts.back().forces[j],i->feedback[j].f1);
+    CopyVector(contacts.back().points[j].x,i->contacts[j].pos);
+    CopyVector(contacts.back().points[j].n,i->contacts[j].normal);
+    //contacts.back().points[j].kFriction = i->contacts[j].surface.mu;
+    contacts.back().points[j].kFriction = 0;
+    if(reverse) {
+      contacts.back().forces[j].inplaceNegative();
+      contacts.back().points[j].n.inplaceNegative();
+    }
       }
     }
   }
@@ -1255,9 +1217,9 @@ bool ODESimulator::InContact(const ODEObjectID& a) const
     }
     for(size_t i=0;i<robots.size();i++) {
       for(size_t j=0;j<robots[i]->robot.links.size();j++) {
-	if(HasContact(robots[i]->body(j),0)) return true;
+    if(HasContact(robots[i]->body(j),0)) return true;
       }
-    }    
+    }
     return false;
   }
   else if(a.type == 2) {//object
@@ -1268,7 +1230,7 @@ bool ODESimulator::InContact(const ODEObjectID& a) const
       return HasContact(robots[a.index]->body(a.bodyIndex));
     else { //any robot link
       for(size_t i=0;i<robots[a.index]->robot.links.size();i++)
-	if(HasContact(robots[a.index]->body(i))) return true;
+    if(HasContact(robots[a.index]->body(i))) return true;
       return false;
     }
   }
@@ -1289,8 +1251,8 @@ bool ODESimulator::InContact(const ODEObjectID& a,const ODEObjectID& b) const
       bodya.push_back(robots[a.index]->body(a.bodyIndex));
     else {
       for(size_t i=0;i<robots[a.index]->robot.links.size();i++)
-	if(robots[a.index]->body(i))
-	  bodya.push_back(robots[a.index]->body(i));
+    if(robots[a.index]->body(i))
+      bodya.push_back(robots[a.index]->body(i));
     }
   }
   if(b.type == 0) {
@@ -1304,8 +1266,8 @@ bool ODESimulator::InContact(const ODEObjectID& a,const ODEObjectID& b) const
       bodyb.push_back(robots[b.index]->body(b.bodyIndex));
     else {
       for(size_t i=0;i<robots[b.index]->robot.links.size();i++)
-	if(robots[b.index]->body(i))
-	  bodyb.push_back(robots[b.index]->body(i));
+    if(robots[b.index]->body(i))
+      bodyb.push_back(robots[b.index]->body(i));
     }
   }
   for(size_t i=0;i<bodya.size();i++)
@@ -1324,9 +1286,9 @@ void ODESimulator::StepDynamics(Real dt)
 bool ODESimulator::ReadState(File& f)
 {
 #if TEST_READ_WRITE_STATE
-  for(size_t i=0;i<robots.size();i++) 
+  for(size_t i=0;i<robots.size();i++)
     TestReadWriteState(*robots[i],"ODERobot");
-  for(size_t i=0;i<objects.size();i++) 
+  for(size_t i=0;i<objects.size();i++)
     TestReadWriteState(*objects[i],"ODEObject");
 #endif
 
@@ -1348,9 +1310,9 @@ bool ODESimulator::ReadState(File& f)
 
 bool ODESimulator::WriteState(File& f) const
 {
-  for(size_t i=0;i<robots.size();i++) 
+  for(size_t i=0;i<robots.size();i++)
     if(!robots[i]->WriteState(f)) return false;
-  for(size_t i=0;i<objects.size();i++) 
+  for(size_t i=0;i<objects.size();i++)
     if(!objects[i]->WriteState(f)) return false;
   return true;
 }

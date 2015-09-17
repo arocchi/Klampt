@@ -7,7 +7,11 @@
   <rigidObject name="spikes" file="../objects/spike_plane.obj" position="1 .2 0.2"/>
   <rigidObject name="plane"  file="../objects/flatblock.obj" position="1 .2 0.4"/>
 
-  <rigidObject name="spray_bottle" file="../objects/spray_bottle.obj" position="1 .6 0.005"/>
+  <rigidObject name="spray_bottle" file="../objects/spray_bottle_with_cap.obj" position="1.5 1.5 0.005"/>
+
+  <rigidObject name="spray_bottle" file="../objects/heinz.obj" position="1.5 1.75 0.005"/>
+
+  <rigidObject name="spray_bottle" file="../objects/hammer.obj" position="1.5 2.0 0.005"/>
 
 
   <simulation>
