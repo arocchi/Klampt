@@ -17,49 +17,54 @@
   </rigidObject>
 
   <simulation>
-    <globals maxContacts="50" robotSelfCollisions="0" timestep="0.001"/>
-    <!--
-    <robot index="0" body="0"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
-    </robot>
-    <robot index="0" body="1"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
-    </robot>
-    <robot index="0" body="2"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
-    </robot>
-    <robot index="0" body="3"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
-    </robot>
-    <robot index="0" body="4"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
-    </robot>
-    <robot index="0" body="5"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
-    </robot>
+    <globals maxContacts="20" robotSelfCollisions="0" timestep="0.001"/>
     <robot index="0" body="6"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="200000" damping="1000000" />
     </robot>
     <robot index="0" body="7"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
     </robot>
     <robot index="0" body="8"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
     </robot>
     <robot index="0" body="9"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
     </robot>
     <robot index="0" body="10"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
     </robot>
     <robot index="0" body="11"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
     </robot>
    <robot index="0" body="12"> 
-       <geometry kFriction="1.0" kRestitution="0.0" padding="0.001" stiffness="200000" damping="100000" />
-    </robot>-->
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
+    </robot>
+   <robot index="0" body="13"> 
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
+    </robot>
+   <robot index="0" body="14"> 
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
+    </robot>
+   <robot index="0" body="15"> 
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
+    </robot>
+   <robot index="0" body="16"> 
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
+    </robot>
+   <robot index="0" body="17"> 
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
+    </robot>
+   <robot index="0" body="18"> 
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
+    </robot>
+   <robot index="0" body="19"> 
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
+    </robot>
+   <robot index="0" body="20"> 
+       <geometry preshrink="2" kFriction="1.5" kRestitution="0.0" padding="0.002" stiffness="2000000" damping="1000000" />
+    </robot>
     <object index="0">
-      <geometry  padding="0.005" preshrink="2" kFriction="1.5" kRestitution="0.0"/>
+      <geometry  padding="0.002" preshrink="2" kFriction="0.3" kRestitution="0.0"/>
     </object>
   </simulation>
 </world>
