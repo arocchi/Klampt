@@ -16,9 +16,11 @@ class SimLogger:
         self.fn = state_fn
         self.f = None
         if state_fn != None:
+            print "SimLogger: Saving state to",state_fn
             self.f = open(state_fn,'w')
         self.f_contact = None
         if contact_fn != None:
+            print "SimLogger: Saving contacts to",contact_fn
             self.f_contact = open(contact_fn,'w')
         self.colliding = []
         if colliding=='all':

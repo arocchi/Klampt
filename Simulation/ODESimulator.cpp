@@ -19,9 +19,13 @@
 #define TEST_READ_WRITE_STATE 0
 #define DO_TIMING 0
 
-#define USE_SUBSAMPLING false
+#define USE_DETERMINISTIC_SUBSAMPLE true
 #define USE_K_MEANS     true
+
+// values used for test
+#define USE_RANDOM_SUBSAMPLE false
 #define USE_CLUSTERING  false
+#define USE_SORTING  false
 
 const static size_t gMaxKMeansSize = 5000;
 const static size_t gMaxHClusterSize = 2000;
@@ -468,7 +472,7 @@ void ClusterContactsMerge(vector<dContactGeom>& contacts,int maxClusters,Real cl
     pts[i][6] = contacts[i].depth;
   }
 
-  Timer timer;
+  //Timer timer;
   Statistics::HierarchicalClustering clust;
   clust.Build(pts,maxClusters,Statistics::HierarchicalClustering::AverageLinkage);
   //cout<<"Clustering time: "<<timer.ElapsedTime()<<endl;
@@ -598,37 +602,60 @@ void ClusterContactsKMeans(vector<dContactGeom>& contacts,int maxClusters,Real c
   }
 }
 
+
+bool depthGreater(const dContactGeom& a,const dContactGeom& b)
+{
+  return a.depth > b.depth;
+}
+
+
 void ClusterContacts(vector<dContactGeom>& contacts,int maxClusters,Real clusterNormalScale)
 {
   gPreclusterContacts += contacts.size();
 
   //for really big contact sets, do a subsampling
-  if(USE_SUBSAMPLING && (contacts.size()*maxClusters > gMaxKMeansSize && contacts.size()*contacts.size() > gMaxHClusterSize)) {
+  if(contacts.size()*maxClusters > gMaxKMeansSize && contacts.size()*contacts.size() > gMaxHClusterSize) {
     int minsize = Max((int)gMaxKMeansSize/maxClusters,(int)Sqrt(Real(gMaxHClusterSize)));
     printf("ClusterContacts: subsampling %d to %d contacts\n",(int)contacts.size(),minsize);
-    //subsample
-    vector<int> subsample(contacts.size());
-    RandomPermutation(subsample);
-    subsample.resize(minsize);
-    vector<dContactGeom> subcontacts(subsample.size());
-    for(size_t i=0;i<subsample.size();i++)
-      subcontacts[i] = contacts[subsample[i]];
-    swap(subcontacts,contacts);
-  }
-  if(USE_K_MEANS && USE_CLUSTERING)
-  {
-      size_t hclusterSize = contacts.size()*contacts.size();
-      size_t kmeansSize = contacts.size()*maxClusters;
+    vector<dContactGeom> subcontacts(minsize);
+    //deterministic subsample
+	if(USE_DETERMINISTIC_SUBSAMPLE}
+	{
+		for(int i=0;i<minsize;i++) {
+		  subcontacts[i] = contacts[(i*minsize)/contacts.size()];
+		}
+	    swap(subcontacts,contacts);
+	}
+    //random subsample
+    else if(USE_RANDOM_SUBSAMPLE)
+	{
+		vector<int> subsample(contacts.size());
+		RandomPermutation(subsample);
+		subsample.resize(minsize);
+		for(size_t i=0;i<subsample.size();i++)
+		{
+		  subcontacts[i] = contacts[subsample[i]];
+		}
+	    swap(subcontacts,contacts);
+    }
 
-      if(hclusterSize < gMaxHClusterSize)
-        ClusterContactsMerge(contacts,maxClusters,clusterNormalScale);
-      else
-        ClusterContactsKMeans(contacts,maxClusters,clusterNormalScale);
   }
+
+  size_t hclusterSize = contacts.size()*contacts.size();
+  size_t kmeansSize = contacts.size()*maxClusters;
+
+  if(USE_K_MEANS)
+    ClusterContactsKMeans(contacts,maxClusters,clusterNormalScale);
   else if(USE_CLUSTERING)
-      ClusterContactsMerge(contacts,maxClusters,clusterNormalScale);
-  else if(USE_K_MEANS)
-      ClusterContactsKMeans(contacts,maxClusters,clusterNormalScale);
+  //TEST: clustering - disable the size check, can get slow
+  //if(hclusterSize < gMaxHClusterSize)
+    ClusterContactsMerge(contacts,maxClusters,clusterNormalScale);
+  else if(USE_SORTING)
+  //TEST: contact depth sorting
+	  if(contacts.size() > maxClusters) {
+		sort(contacts.begin(),contacts.end(),depthGreater);
+		contacts.resize(maxClusters);
+	  }
 }
 
 void MergeContacts(vector<dContactGeom>& contacts,double posTolerance,double oriTolerance)

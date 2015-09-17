@@ -4064,7 +4064,8 @@ class Simulator(_object):
     __swig_getmethods__ = {}
     __getattr__ = lambda self, name: _swig_getattr(self, Simulator, name)
     __repr__ = _swig_repr
-    def __init__(self, *args): 
+
+    def __init__(self, model):
         """
         __init__(Simulator self, WorldModel model) -> Simulator
 
@@ -4074,9 +4075,11 @@ class Simulator(_object):
         loaded from an XML file, then the simulation setup is loaded from it.
 
         """
-        this = _robotsim.new_Simulator(*args)
-        try: self.this.append(this)
-        except: self.this = this
+        this = _robotsim.new_Simulator(model)
+        try:
+            self.this.append(this)
+        except:
+            self.this = this
     __swig_destroy__ = _robotsim.delete_Simulator
     __del__ = lambda self : None;
     def reset(self):

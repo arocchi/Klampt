@@ -1099,7 +1099,7 @@ RobotModelLink WorldModel::robotLink(const char* robotname,const char* link)
   r.world = index;
   r.robotIndex = rob.index;
   r.robotPtr = rob.robot;
-  if(rob.index < 0)
+  if(rob.index < 0) 
     return r;
   r.index = -1;
   for(size_t i=0;i<rob.robot->links.size();i++)
@@ -1576,7 +1576,7 @@ int RobotModelDriver::getAffectedLink()
 
 void RobotModelDriver::getAffectedLinks(std::vector<int>& links)
 {
-  if(index < 0) links.resize(0);
+  if(index < 0) links.resize(0); 
   else links = robotPtr->drivers[index].linkIndices;
 }
 
@@ -2110,8 +2110,7 @@ void TerrainModel::drawGL(bool keepAppearance)
 }
 
 
-
-Simulator::Simulator(const WorldModel& model)
+Simulator::Simulator(const WorldModel& model,const char* settings)
 {
 #ifdef dDOUBLE
   if(dCheckConfiguration("ODE_double_precision")!=1) {
@@ -2127,6 +2126,10 @@ Simulator::Simulator(const WorldModel& model)
   index = createSim();
   world = model;
   sim = &sims[index]->sim;
+  if(settings && 0==strcmp(settings,"no_blem")) {
+    printf("Turning off boundary layer collisions\n");
+    sim->odesim.GetSettings().boundaryLayerCollisions = false;
+  }
 
   //initialize simulation
   printf("Initializing simulation...\n");
@@ -2156,10 +2159,8 @@ Simulator::Simulator(const WorldModel& model)
   }
 
   //TEMP: play around with auto disable of rigid objects
-  /*
-  for(size_t i=0;i<sim->odesim.numObjects();i++)
-    dBodySetAutoDisableFlag(sim->odesim.object(i)->body(),1);
-  */
+  //for(size_t i=0;i<sim->odesim.numObjects();i++)
+  //    dBodySetAutoDisableFlag(sim->odesim.object(i)->body(),1);
 
   sim->WriteState(initialState);
 }
@@ -2341,7 +2342,7 @@ void Simulator::enableContactFeedbackAll()
       for(size_t i=0;i<rworld.rigidObjects.size();i++) {
     sim->EnableContactFeedback(rworld.RigidObjectID(i),linkid);
       }
-      //robot-world
+      //robot-object
       for(size_t i=0;i<rworld.terrains.size();i++) {
     sim->EnableContactFeedback(rworld.TerrainID(i),linkid);
       }
@@ -2550,7 +2551,7 @@ SimBody Simulator::body(const RigidObjectModel& object)
   SimBody b;
   b.body = sim->odesim.object(object.index)->body();
   b.geometry = sim->odesim.object(object.index)->triMesh();
-  return b;
+  return b; 
 }
 
 SimBody Simulator::body(const TerrainModel& terrain)
@@ -2570,7 +2571,7 @@ void Simulator::getJointForces(const RobotModelLink& link,double out[6])
   oderobot->GetLinkTransform(link.index,T);
   Vector3 mcomw = Vector3(fb.t1[0],fb.t1[1],fb.t1[2]);
   //convert moment about link's com to moment about localpos
-  //mp_w = (p-com) x f_w + mcom_w
+  //mp_w = (p-com) x f_w + mcom_w 
   Vector3 comw = T*link.robotPtr->links[link.index].com;
   Vector3 mw = cross(comw,fw) + mcomw;
   //convert to local frame
@@ -2841,6 +2842,7 @@ double SimRobotController::remainingTime() const
   PolynomialMotionQueue* mq = GetMotionQueue(sim->controlSimulators[index].controller);
   return mq->TimeRemaining();
 }
+
 
 void SimRobotController::setTorque(const std::vector<double>& t)
 {
