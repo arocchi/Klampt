@@ -19,9 +19,6 @@
 #define TEST_READ_WRITE_STATE 0
 #define DO_TIMING 0
 
-#define USE_SUBSAMPLING true    // by default, deterministic subsampling
-#define USE_K_MEANS     true
-
 // values used for test
 #define USE_RANDOM_SUBSAMPLING false
 #define USE_CLUSTERING  false
@@ -607,7 +604,8 @@ void ClusterContacts(vector<dContactGeom>& contacts,int maxClusters,Real cluster
   gPreclusterContacts += contacts.size();
 
   //for really big contact sets, do a subsampling
-  if(USE_SUBSAMPLING && contacts.size()*maxClusters > gMaxKMeansSize && contacts.size()*contacts.size() > gMaxHClusterSize) {
+  if(contacts.size()*maxClusters > gMaxKMeansSize && contacts.size()*contacts.size() > gMaxHClusterSize)
+  {
     int minsize = Max((int)gMaxKMeansSize/maxClusters,(int)Sqrt(Real(gMaxHClusterSize)));
     printf("ClusterContacts: subsampling %d to %d contacts\n",(int)contacts.size(),minsize);
     vector<dContactGeom> subcontacts(minsize);
@@ -635,21 +633,24 @@ void ClusterContacts(vector<dContactGeom>& contacts,int maxClusters,Real cluster
 
   }
 
-  size_t hclusterSize = contacts.size()*contacts.size();
-  size_t kmeansSize = contacts.size()*maxClusters;
-
-  if(USE_K_MEANS)
-    ClusterContactsKMeans(contacts,maxClusters,clusterNormalScale);
-  else if(USE_CLUSTERING)
+  if(USE_CLUSTERING)
+  {
   //TEST: clustering - disable the size check, can get slow
   //if(hclusterSize < gMaxHClusterSize)
     ClusterContactsMerge(contacts,maxClusters,clusterNormalScale);
+  }
   else if(USE_SORTING)
+  {
   //TEST: contact depth sorting
     if(contacts.size() > maxClusters) {
       sort(contacts.begin(),contacts.end(),depthGreater);
       contacts.resize(maxClusters);
     }
+  }
+  else // default is k-means
+  {
+    ClusterContactsKMeans(contacts,maxClusters,clusterNormalScale);
+  }
 }
 
 void collisionCallback(void *data, dGeomID o1, dGeomID o2)
