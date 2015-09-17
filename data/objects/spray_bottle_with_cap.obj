@@ -1,4 +1,4 @@
-mesh "meshes/spray_bottle_with_cap_mesh.ply"
+mesh "meshes/spray_bottle_with_cap_mesh_better_stitch.ply"
 geomscale 1 1 1
 mass 0.726
 autoMass

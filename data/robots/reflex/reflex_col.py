@@ -6,12 +6,13 @@ from klampt.glprogram import *
 import numpy.random
 import numpy.linalg
 from simlog import *
+import os.path  
 
 has_moving_base = True
 
 DRAW_COMMANDED = False
 
-AUTOMATIC_MODE = True
+AUTOMATIC_MODE = False
 
 # for all experiments, use low effort (3.3). For high effort experiments, scale that value by 3/2 (as in physical exps)
 THRESHOLD_EFFORT = 3.3
@@ -193,7 +194,7 @@ class HandSim:
         qactual = self.controller.getSensedConfig()
         pulls = [qcmd[l] - qactual[l] for l in self.model.proximal_links]
         #print pulls
-        pullscale = 0.5
+        pullscale = 2.0
         #pullscale = 0.75
         rubber_length = 0.0215
         self.tendon_lengths = [0,0,0]
@@ -271,7 +272,7 @@ class HandSimGLViewer(GLRealtimeProgram):
         self.drivers = [self.handsim.model.robot.driver(d) for d in xrange(self.handsim.model.robot.numDrivers())]
 
         self.world = handsim.world
-        self.world_name = world_name
+        self.world_name = os.path.basename(world_name)
 
         self.simulate = AUTOMATIC_MODE
         self.auto_close = AUTOMATIC_MODE
@@ -286,18 +287,22 @@ class HandSimGLViewer(GLRealtimeProgram):
         self.remaining_shakes = None
 
         self.lifting = False
-        self.lifting_duration = 5.0 + self.auto_close_idle_duration # wait for auto_close_idle before lifting
+        self.lifting_duration = 1.0 + self.auto_close_idle_duration # wait for auto_close_idle before lifting
         self.lifting_timeout = None
 
         self.settling_time = 1.0
         self.auto_start_timeout = None
+
+        self.saveScreenshots = False
+        self.nextScreenshotTime = 0
+        self.screenshotCount = 0
 
         self.threshold_effort = THRESHOLD_EFFORT
 
         self.stats = {"S0":None,"S1": None, "S2": None, "S3": None}
 
         if self.world_name is not None:
-            if self.world_name.split(".") in high_effort_experiments:
+            if self.world_name.split(".")[0] in high_effort_experiments:
                 self.threshold_effort = HIGH_EFFORT
 
         self.object = None
@@ -328,7 +333,7 @@ class HandSimGLViewer(GLRealtimeProgram):
         random_dist *= shake_pert
 
         for i in xrange(3):
-            self.x_des[i] += random_dist[i]
+            self.handsim.base_setpoint[i] += random_dist[i]
 
     def saveExperimentStatistics(self):
         if self.world_name is not None:
@@ -504,6 +509,12 @@ class HandSimGLViewer(GLRealtimeProgram):
                 t += self.control_dt
             glutPostRedisplay()
 
+            if self.saveScreenshots and self.ttotal >= self.nextScreenshotTime:
+                self.save_screen("image%04d.ppm"%(self.screenshotCount,))
+                self.screenshotCount += 1
+                self.nextScreenshotTime += 1.0/30.0;
+
+
     def keyboardfunc(self,c,x,y):
         #Put your keyboard handler here
         #the current example toggles simulation / movie mode
@@ -562,6 +573,9 @@ class HandSimGLViewer(GLRealtimeProgram):
             self.drawContacts = not self.drawContacts
             if self.drawContacts:
                 self.sim.enableContactFeedbackAll()
+        elif c == 'r':
+            self.saveScreenshots = not self.saveScreenshots
+            print "Movie mode:",self.saveScreenshots
 
         glutPostRedisplay()
 
