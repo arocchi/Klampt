@@ -2,7 +2,12 @@
 // File: index.xml
 
 // File: structContactParameters.xml
-%feature("docstring") ContactParameters "";
+%feature("docstring") ContactParameters "
+
+Stores contact parameters for an entity. Currently only used for
+simulation, but could be used for contact mechanics in the future.
+
+C++ includes: robotmodel.h ";
 
 
 // File: classCSpaceInterface.xml
@@ -73,6 +78,39 @@ CSpaceInterface::setInterpolate(PyObject *pyInterp) ";
 
 %feature("docstring")  CSpaceInterface::setProperty "void
 CSpaceInterface::setProperty(const char *key, const char *value) ";
+
+%feature("docstring")  CSpaceInterface::getProperty "const char *
+CSpaceInterface::getProperty(const char *key) ";
+
+%feature("docstring")  CSpaceInterface::isFeasible "bool
+CSpaceInterface::isFeasible(PyObject *q)
+
+queries ";
+
+%feature("docstring")  CSpaceInterface::isVisible "bool
+CSpaceInterface::isVisible(PyObject *a, PyObject *b) ";
+
+%feature("docstring")  CSpaceInterface::testFeasibility "bool
+CSpaceInterface::testFeasibility(const char *name, PyObject *q) ";
+
+%feature("docstring")  CSpaceInterface::testVisibility "bool
+CSpaceInterface::testVisibility(const char *name, PyObject *a,
+PyObject *b) ";
+
+%feature("docstring")  CSpaceInterface::feasibilityFailures "PyObject
+* CSpaceInterface::feasibilityFailures(PyObject *q) ";
+
+%feature("docstring")  CSpaceInterface::visibilityFailures "PyObject
+* CSpaceInterface::visibilityFailures(PyObject *a, PyObject *b) ";
+
+%feature("docstring")  CSpaceInterface::sample "PyObject *
+CSpaceInterface::sample() ";
+
+%feature("docstring")  CSpaceInterface::distance "double
+CSpaceInterface::distance(PyObject *a, PyObject *b) ";
+
+%feature("docstring")  CSpaceInterface::interpolate "PyObject *
+CSpaceInterface::interpolate(PyObject *a, PyObject *b, double u) ";
 
 
 // File: classGeneralizedIKObjective.xml
@@ -174,7 +212,12 @@ Samples an initial random configuration. ";
 
 
 // File: structGeometricPrimitive.xml
-%feature("docstring") GeometricPrimitive "";
+%feature("docstring") GeometricPrimitive "
+
+A geometric primitive. So far only points, spheres, segments, and
+AABBs can be constructed manually in the Python API.
+
+C++ includes: geometry.h ";
 
 %feature("docstring")  GeometricPrimitive::setPoint "void
 GeometricPrimitive::setPoint(const double pt[3]) ";
@@ -204,6 +247,12 @@ A three-D geometry. Can either be a reference to a world item's
 geometry, in which case modifiers change the world item's geometry, or
 it can be a standalone geometry.
 
+Each geometry stores a \"current\" transform, which is automatically
+updated for world items' geometries. The proximity queries are
+performed with respect to the transformed geometries (note the
+underlying geometry is not changed, which could be computationally
+expensive. The query is performed, however, as though they were).
+
 If you want to set a world item's geometry to be equal to a standalone
 geometry, use the set(rhs) function rather than the assignment (=)
 operator.
@@ -211,7 +260,7 @@ operator.
 Modifiers include any setX() functions, translate(), and transform().
 
 Proximity queries include collides(), withinDistance(), distance(),
-and rayCast().
+closestPoint(), and rayCast().
 
 Each object also has a \"collision margin\" which may virtually fatten
 the object, as far as proximity queries are concerned. This is useful
@@ -278,10 +327,37 @@ Geometry3D::setPointCloud(const PointCloud &) ";
 Geometry3D::setGeometricPrimitive(const GeometricPrimitive &) ";
 
 %feature("docstring")  Geometry3D::loadFile "bool
-Geometry3D::loadFile(const char *fn) ";
+Geometry3D::loadFile(const char *fn)
+
+Loads from file. Standard mesh types, PCD files, and .geom files are
+supported. ";
 
 %feature("docstring")  Geometry3D::saveFile "bool
-Geometry3D::saveFile(const char *fn) ";
+Geometry3D::saveFile(const char *fn)
+
+Saves to file. Standard mesh types, PCD files, and .geom files are
+supported. ";
+
+%feature("docstring")  Geometry3D::attachToStream "bool
+Geometry3D::attachToStream(const char *protocol, const char *name,
+const char *type=\"\")
+
+Attaches this geometry to a given stream.
+
+Currently only \"ros\" protocol is supported. For \"ros\" protocol,
+name is the ROS topic to attach to. type indicates the datatype that
+the stream source should have, and this will return false if that type
+is not obeyed. Currently only the \"PointCloud\" or default empty
+(\"\") types are supported.
+
+Note: you will need to call Appearance.refresh(True) to get the
+appearance to update. ";
+
+%feature("docstring")  Geometry3D::detachFromStream "bool
+Geometry3D::detachFromStream(const char *protocol, const char *name)
+
+Detaches this geometry from a given stream. This must be called before
+deleting a piece of geometry. ";
 
 %feature("docstring")  Geometry3D::setCurrentTransform "void
 Geometry3D::setCurrentTransform(const double R[9], const double t[3])
@@ -299,10 +375,15 @@ Geometry3D::transform(const double R[9], const double t[3])
 Translates/rotates the geometry data. ";
 
 %feature("docstring")  Geometry3D::setCollisionMargin "void
-Geometry3D::setCollisionMargin(double margin) ";
+Geometry3D::setCollisionMargin(double margin)
+
+Sets a padding around the base geometry which affects the results of
+proximity queries ";
 
 %feature("docstring")  Geometry3D::getCollisionMargin "double
-Geometry3D::getCollisionMargin() ";
+Geometry3D::getCollisionMargin()
+
+Returns the padding around the base geometry. Default 0. ";
 
 %feature("docstring")  Geometry3D::getBB "void
 Geometry3D::getBB(double out[3], double out2[3])
@@ -310,14 +391,20 @@ Geometry3D::getBB(double out[3], double out2[3])
 Returns the axis-aligned bounding box of the object. ";
 
 %feature("docstring")  Geometry3D::collides "bool
-Geometry3D::collides(const Geometry3D &other) ";
+Geometry3D::collides(const Geometry3D &other)
+
+Returns true if this geometry collides with the other. ";
 
 %feature("docstring")  Geometry3D::withinDistance "bool
-Geometry3D::withinDistance(const Geometry3D &other, double tol) ";
+Geometry3D::withinDistance(const Geometry3D &other, double tol)
+
+Returns true if this geometry is within distance tol to other. ";
 
 %feature("docstring")  Geometry3D::distance "double
 Geometry3D::distance(const Geometry3D &other, double relErr=0, double
-absErr=0) ";
+absErr=0)
+
+Returns the distance from this geometry to the other. ";
 
 %feature("docstring")  Geometry3D::closestPoint "bool
 Geometry3D::closestPoint(const double pt[3], double out[3])
@@ -405,6 +492,52 @@ R[9], const double t[3])
 
 Sets a fixed-transform constraint (R,t) relative to linkTgt. ";
 
+%feature("docstring")  IKObjective::setLinks "void
+IKObjective::setLinks(int link, int link2=-1)
+
+Manual construction. ";
+
+%feature("docstring")  IKObjective::setFreePosition "void
+IKObjective::setFreePosition()
+
+Manual: Sets a free position constraint. ";
+
+%feature("docstring")  IKObjective::setFixedPosConstraint "void
+IKObjective::setFixedPosConstraint(const double tlocal[3], const
+double tworld[3])
+
+Manual: Sets a fixed position constraint. ";
+
+%feature("docstring")  IKObjective::setPlanarPosConstraint "void
+IKObjective::setPlanarPosConstraint(const double tlocal[3], const
+double nworld[3], double oworld)
+
+Manual: Sets a planar position constraint nworld^T T(link)*tlocal +
+oworld = 0 ";
+
+%feature("docstring")  IKObjective::setLinearPosConstraint "void
+IKObjective::setLinearPosConstraint(const double tlocal[3], const
+double sworld[3], const double dworld[3])
+
+Manual: Sets a linear position constraint T(link)*tlocal = sworld +
+u*dworld for some real value u ";
+
+%feature("docstring")  IKObjective::setFreeRotConstraint "void
+IKObjective::setFreeRotConstraint()
+
+Manual: Sets a free rotation constraint. ";
+
+%feature("docstring")  IKObjective::setFixedRotConstraint "void
+IKObjective::setFixedRotConstraint(const double R[9])
+
+Manual: Sets a fixed rotation constraint. ";
+
+%feature("docstring")  IKObjective::setAxialRotConstraint "void
+IKObjective::setAxialRotConstraint(const double alocal[3], const
+double aworld[3])
+
+Manual: Sets an axial rotation constraint. ";
+
 %feature("docstring")  IKObjective::getPosition "void
 IKObjective::getPosition(double out[3], double out2[3]) const
 
@@ -429,6 +562,20 @@ For axis rotation constraints, returns the local and global axes. ";
 IKObjective::getTransform(double out[9], double out2[3]) const
 
 For fixed-transform constraints, returns the transform (R,T) ";
+
+%feature("docstring")  IKObjective::loadString "bool
+IKObjective::loadString(const char *str)
+
+Loads the objective from a Klamp't-native formatted string. For a more
+readable but verbose format, try the JSON IO routines
+loader.toJson/fromJson() ";
+
+%feature("docstring")  IKObjective::saveString "std::string
+IKObjective::saveString() const
+
+Saves the objective to a Klamp't-native formatted string. For a more
+readable but verbose format, try the JSON IO routines
+loader.toJson/fromJson() ";
 
 
 // File: classIKSolver.xml
@@ -548,7 +695,7 @@ string &str) ";
 // File: structMass.xml
 %feature("docstring") Mass "
 
-Stores mass information for a rigid body.
+Stores mass information for a rigid body or robot link.
 
 C++ includes: robotmodel.h ";
 
@@ -579,9 +726,18 @@ cspace.py is somewhat easier to use.
 On construction, uses the planner type specified by setPlanType and
 the settings currently specified by calls to setPlanSetting.
 
-Point-to-point planning is enabled using the setEndpoints method. This
-is mandatory for RRT and SBL planners. The start and end milestones
-are given by indices 0 and 1, respectively
+Point-to-point planning is enabled by sending two configurations to
+the setEndpoints method. This is mandatory for RRT and SBL-style
+planners. The start and end milestones are given by indices 0 and 1,
+respectively
+
+Point-to-set planning is enabled by sending a goal test as the second
+argument to the setEndpoints method. It is possible also to send a
+special goal sampler by providing a pair of functions as the second
+argument consisting of the two functions (goaltest,goalsample). The
+first in this pair tests whether a configuration is a goal, and the
+second returns a sampled configuration in a superset of the goal.
+Ideally the goal sampler generates as many goals as possible.
 
 PRM can be used in either point-to-point or multi-query mode. In
 multi-query mode, you may call addMilestone(q) to add a new milestone.
@@ -648,13 +804,101 @@ properties: a list of vertex properties, given as a list [p11, p21,
 vertex has k properties. The name of each property is given by the
 propertyNames member.
 
+Note: because the bindings are generated by SWIG, you can access the
+vertices/properties/propertyName members via some automatically
+generated accessors / modifiers. In particular len(), append(), and
+indexing via [] are useful. Some other methods like resize() are also
+provided. However, you CANNOT set these items via assignment.
+
+Examples:
+
+pc = PointCloud() pc.propertyNames.append('rgb') pc.vertices.append(0)
+pc.vertices.append(0) pc.vertices.append(0) pc.properties.append(0)
+print len(pc.vertices) #prints 3 print pc.numPoints() #prints 1
+pc.addPoint([1,2,3]) print pc.numPoints() #prints 2 print
+len(pc.properties.size()) #prints 2: 1 property category x 2 points
+print pc.getProperty(1,0) #prints 0; this is the default value added
+when addPoint is called
+
 C++ includes: geometry.h ";
 
+%feature("docstring")  PointCloud::numPoints "int
+PointCloud::numPoints() const
+
+Returns the number of points. ";
+
+%feature("docstring")  PointCloud::numProperties "int
+PointCloud::numProperties() const
+
+Returns the number of properties. ";
+
+%feature("docstring")  PointCloud::setPoints "void
+PointCloud::setPoints(int num, const std::vector< double > &plist)
+
+Sets all the points to the given list (a 3n-list) ";
+
+%feature("docstring")  PointCloud::addPoint "int
+PointCloud::addPoint(const double p[3])
+
+Adds a point. Sets all its properties to 0. Returns the index. ";
+
+%feature("docstring")  PointCloud::setPoint "void
+PointCloud::setPoint(int index, const double p[3])
+
+Sets the position of the point at the given index to p. ";
+
+%feature("docstring")  PointCloud::getPoint "void
+PointCloud::getPoint(int index, double out[3]) const
+
+Retrieves the position of the point at the given index. ";
+
+%feature("docstring")  PointCloud::setProperties "void
+PointCloud::setProperties(const std::vector< double > &properties)
+
+Sets all the properties of all points to the given list (a kn-list) ";
+
+%feature("docstring")  PointCloud::setProperties "void
+PointCloud::setProperties(int pindex, const std::vector< double >
+&properties)
+
+Sets property pindex of all points to the given list (a n-list) ";
+
+%feature("docstring")  PointCloud::setProperty "void
+PointCloud::setProperty(int index, int pindex, double value)
+
+Sets property pindex of point index to the given value. ";
+
+%feature("docstring")  PointCloud::setProperty "void
+PointCloud::setProperty(int index, const std::string &pname, double
+value)
+
+Sets the property named pname of point index to the given value. ";
+
+%feature("docstring")  PointCloud::getProperty "double
+PointCloud::getProperty(int index, int pindex) const
+
+Gets property pindex of point index. ";
+
+%feature("docstring")  PointCloud::getProperty "double
+PointCloud::getProperty(int index, const std::string &pname) const
+
+Gets the property named pname of point index. ";
+
 %feature("docstring")  PointCloud::translate "void
-PointCloud::translate(const double t[3]) ";
+PointCloud::translate(const double t[3])
+
+Translates all the points by v=v+t. ";
 
 %feature("docstring")  PointCloud::transform "void
-PointCloud::transform(const double R[9], const double t[3]) ";
+PointCloud::transform(const double R[9], const double t[3])
+
+Transforms all the points by the rigid transform v=R*v+t. ";
+
+%feature("docstring")  PointCloud::join "void PointCloud::join(const
+PointCloud &pc)
+
+Adds the given point cloud to this one. They must share the same
+properties or else an exception is raised ";
 
 
 // File: classPyCSpace.xml
@@ -673,8 +917,27 @@ PyCSpace::Sample(Config &x) ";
 %feature("docstring")  PyCSpace::SampleNeighborhood "virtual void
 PyCSpace::SampleNeighborhood(const Config &c, double r, Config &x) ";
 
+%feature("docstring")  PyCSpace::NumObstacles "virtual int
+PyCSpace::NumObstacles() ";
+
+%feature("docstring")  PyCSpace::ObstacleName "virtual std::string
+PyCSpace::ObstacleName(int obstacle) ";
+
+%feature("docstring")  PyCSpace::IsFeasible "virtual bool
+PyCSpace::IsFeasible(const Config &x, int obstacle) ";
+
 %feature("docstring")  PyCSpace::IsFeasible "virtual bool
 PyCSpace::IsFeasible(const Config &x) ";
+
+%feature("docstring")  PyCSpace::IsVisible "virtual bool
+PyCSpace::IsVisible(const Config &a, const Config &b) ";
+
+%feature("docstring")  PyCSpace::IsVisible "virtual bool
+PyCSpace::IsVisible(const Config &a, const Config &b, int obstacle) ";
+
+%feature("docstring")  PyCSpace::LocalPlanner "EdgePlanner *
+PyCSpace::LocalPlanner(const Config &a, const Config &b, int obstacle)
+";
 
 %feature("docstring")  PyCSpace::LocalPlanner "EdgePlanner *
 PyCSpace::LocalPlanner(const Config &a, const Config &b) ";
@@ -694,7 +957,7 @@ PyCSpace::Properties(PropertyMap &props) const ";
 %feature("docstring") PyEdgePlanner "";
 
 %feature("docstring")  PyEdgePlanner::PyEdgePlanner "PyEdgePlanner::PyEdgePlanner(PyCSpace *_space, const Config &_a, const
-Config &_b) ";
+Config &_b, int _obstacle=-1) ";
 
 %feature("docstring")  PyEdgePlanner::~PyEdgePlanner "virtual
 PyEdgePlanner::~PyEdgePlanner() ";
@@ -719,6 +982,22 @@ PyEdgePlanner::Copy() const ";
 
 %feature("docstring")  PyEdgePlanner::ReverseCopy "virtual
 EdgePlanner* PyEdgePlanner::ReverseCopy() const ";
+
+
+// File: classPyGoalSet.xml
+%feature("docstring") PyGoalSet "";
+
+%feature("docstring")  PyGoalSet::PyGoalSet "PyGoalSet::PyGoalSet(CSpace *baseSpace, PyObject *_goalTest, PyObject
+*_sampler=NULL) ";
+
+%feature("docstring")  PyGoalSet::~PyGoalSet "PyGoalSet::~PyGoalSet()
+";
+
+%feature("docstring")  PyGoalSet::Sample "virtual void
+PyGoalSet::Sample(Config &x) ";
+
+%feature("docstring")  PyGoalSet::IsFeasible "virtual bool
+PyGoalSet::IsFeasible(const Config &q) ";
 
 
 // File: classRigidObjectModel.xml
@@ -798,7 +1077,9 @@ robot index) ";
 RobotModel::getName() ";
 
 %feature("docstring")  RobotModel::numLinks "int
-RobotModel::numLinks() ";
+RobotModel::numLinks()
+
+Returns the number of links = number of DOF's. ";
 
 %feature("docstring")  RobotModel::link "RobotModelLink
 RobotModel::link(int index)
@@ -813,31 +1094,41 @@ Returns a reference to the named link. ";
 %feature("docstring")  RobotModel::getLink "RobotModelLink
 RobotModel::getLink(int index)
 
-Old-style: will be deprecated. ";
+Old-style: will be deprecated. Returns a reference to the indexed
+link. ";
 
 %feature("docstring")  RobotModel::getLink "RobotModelLink
 RobotModel::getLink(const char *name)
 
-Old-style: will be deprecated. ";
+Old-style: will be deprecated. Returns a reference to the named link.
+";
 
 %feature("docstring")  RobotModel::numDrivers "int
-RobotModel::numDrivers() ";
+RobotModel::numDrivers()
+
+Returns the number of drivers. ";
 
 %feature("docstring")  RobotModel::driver "RobotModelDriver
-RobotModel::driver(int index) ";
+RobotModel::driver(int index)
+
+Returns a reference to the indexed driver. ";
 
 %feature("docstring")  RobotModel::driver "RobotModelDriver
-RobotModel::driver(const char *name) ";
+RobotModel::driver(const char *name)
+
+Returns a reference to the named driver. ";
 
 %feature("docstring")  RobotModel::getDriver "RobotModelDriver
 RobotModel::getDriver(int index)
 
-Old-style: will be deprecated. ";
+Old-style: will be deprecated. Returns a reference to the indexed
+driver. ";
 
 %feature("docstring")  RobotModel::getDriver "RobotModelDriver
 RobotModel::getDriver(const char *name)
 
-Old-style: will be deprecated. ";
+Old-style: will be deprecated. Returns a reference to a
+RobotModelDriver. ";
 
 %feature("docstring")  RobotModel::getConfig "void
 RobotModel::getConfig(std::vector< double > &out) ";
@@ -878,6 +1169,24 @@ RobotModel::getTorqueLimits(std::vector< double > &out) ";
 %feature("docstring")  RobotModel::setTorqueLimits "void
 RobotModel::setTorqueLimits(const std::vector< double > &tmax) ";
 
+%feature("docstring")  RobotModel::setDOFPosition "void
+RobotModel::setDOFPosition(int i, double qi)
+
+Sets a single DOF's position. Note: if you are setting several joints
+at once, use setConfig because this function computes forward
+kinematics every time. ";
+
+%feature("docstring")  RobotModel::setDOFPosition "void
+RobotModel::setDOFPosition(const char *name, double qi) ";
+
+%feature("docstring")  RobotModel::getDOFPosition "double
+RobotModel::getDOFPosition(int i)
+
+Returns a single DOF's position. ";
+
+%feature("docstring")  RobotModel::getDOFPosition "double
+RobotModel::getDOFPosition(const char *name) ";
+
 %feature("docstring")  RobotModel::getCom "void
 RobotModel::getCom(double out[3])
 
@@ -911,26 +1220,30 @@ velocity. ";
 RobotModel::getCoriolisForces(std::vector< double > &out)
 
 Returns the Coriolis forces C(q,dq)*dq for current config and velocity
-(faster than computing matrix and doing product) ";
+(faster than computing matrix and doing product). (\"Forces\" is
+somewhat of a misnomer; the result is a joint torque vector) ";
 
 %feature("docstring")  RobotModel::getGravityForces "void
 RobotModel::getGravityForces(const double g[3], std::vector< double >
 &out)
 
-Returns the gravity force vector G(q) for the given workspace gravity
-vector g (usually (0,0,-9.8)) ";
+Returns the generalized gravity vector G(q) for the given workspace
+gravity vector g (usually (0,0,-9.8)). (\"Forces\" is somewhat of a
+misnomer; the result is a joint torque vector) ";
 
 %feature("docstring")  RobotModel::torquesFromAccel "void
 RobotModel::torquesFromAccel(const std::vector< double > &ddq,
 std::vector< double > &out)
 
-Computes the inverse dynamics (using Recursive Newton Euler solver) ";
+Computes the inverse dynamics (using Recursive Newton Euler solver).
+Note: does not include gravity term G(q) ";
 
 %feature("docstring")  RobotModel::accelFromTorques "void
 RobotModel::accelFromTorques(const std::vector< double > &t,
 std::vector< double > &out)
 
-Computes the foward dynamics (using Recursive Newton Euler solver) ";
+Computes the foward dynamics (using Recursive Newton Euler solver)
+Note: does not include gravity term G(q) ";
 
 %feature("docstring")  RobotModel::interpolate "void
 RobotModel::interpolate(const std::vector< double > &a, const
@@ -1238,6 +1551,16 @@ Sets the simulation of this body on/off. ";
 
 Returns true if this body is being simulated. ";
 
+%feature("docstring")  SimBody::enableDynamics "void
+SimBody::enableDynamics(bool enabled=true)
+
+Sets the dynamic simulation of the body on/off. If false, velocities
+will simply be integrated forward, and forces will not affect velocity
+i.e., it will be pure kinematic simulation. ";
+
+%feature("docstring")  SimBody::isDynamicsEnabled "bool
+SimBody::isDynamicsEnabled() ";
+
 %feature("docstring")  SimBody::applyWrench "void
 SimBody::applyWrench(const double f[3], const double t[3])
 
@@ -1288,10 +1611,12 @@ SimBody::getCollisionPadding() ";
 %feature("docstring")  SimBody::getSurface "ContactParameters
 SimBody::getSurface()
 
-Gets/sets the surface properties. ";
+Gets (a copy of) the surface properties. ";
 
 %feature("docstring")  SimBody::setSurface "void
-SimBody::setSurface(const ContactParameters &params) ";
+SimBody::setSurface(const ContactParameters &params)
+
+Sets the surface properties. ";
 
 
 // File: structSimData.xml
@@ -1543,7 +1868,8 @@ A dynamics simulator for a WorldModel.
 
 C++ includes: robotsim.h ";
 
-%feature("docstring")  Simulator::Simulator "Simulator::Simulator(const WorldModel &model)
+%feature("docstring")  Simulator::Simulator "Simulator::Simulator(const WorldModel &model, const char
+*settings=NULL)
 
 Constructs the simulator from a WorldModel. If the WorldModel was
 loaded from an XML file, then the simulation setup is loaded from it.
@@ -1687,13 +2013,19 @@ Returns a controller for the indicated robot. ";
 Simulator::controller(const RobotModel &robot) ";
 
 %feature("docstring")  Simulator::body "SimBody Simulator::body(const
-RobotModelLink &link) ";
+RobotModelLink &link)
+
+Returns the SimBody corresponding to the given link. ";
 
 %feature("docstring")  Simulator::body "SimBody Simulator::body(const
-RigidObjectModel &object) ";
+RigidObjectModel &object)
+
+Returns the SimBody corresponding to the given object. ";
 
 %feature("docstring")  Simulator::body "SimBody Simulator::body(const
-TerrainModel &terrain) ";
+TerrainModel &terrain)
+
+Returns the SimBody corresponding to the given terrain. ";
 
 %feature("docstring")  Simulator::getController "SimRobotController
 Simulator::getController(int robot)
@@ -1778,13 +2110,29 @@ coordinate list [x1, y1, z1, x2, y2, ...]
 indices: a list of triangle vertices given as indices into the
 vertices list, i.e., [a1,b1,c2, a2,b2,c2, ...]
 
+Note: because the bindings are generated by SWIG, you can access the
+indices / vertices members via some automatically generated accessors
+/ modifiers. In particular len(), append(), and indexing via [] are
+useful. Some other methods like resize() are also provided. However,
+you CANNOT set these items via assignment.
+
+Examples:
+
+m = TriangleMesh() m.vertices.append(0) m.vertices.append(0)
+m.vertices.append(0) print len(m.vertices) #prints 3 m.vertices =
+[0,0,0] #this is an error m.vertices += [1,2,3] #this is also an error
+
 C++ includes: geometry.h ";
 
 %feature("docstring")  TriangleMesh::translate "void
-TriangleMesh::translate(const double t[3]) ";
+TriangleMesh::translate(const double t[3])
+
+Translates all the vertices by v=v+t. ";
 
 %feature("docstring")  TriangleMesh::transform "void
-TriangleMesh::transform(const double R[9], const double t[3]) ";
+TriangleMesh::transform(const double R[9], const double t[3])
+
+Transforms all the vertices by the rigid transform v=R*v+t. ";
 
 
 // File: structWidgetData.xml
@@ -1824,13 +2172,29 @@ copies of the states of whichever objects you wish to save/restore.
 
 C++ includes: robotmodel.h ";
 
-%feature("docstring")  WorldModel::WorldModel "WorldModel::WorldModel() ";
+%feature("docstring")  WorldModel::WorldModel "WorldModel::WorldModel()
+
+Creates a WorldModel. With no arguments, creates a new world. With an
+integer or another WorldModel instance, creates a reference to an
+existing world. (To create a copy, use the copy() method.)
+
+If passed a pointer to a C++ RobotWorld structure, a reference to that
+structure is returned. (This is used pretty much only when interfacing
+C++ and Python code) ";
+
+%feature("docstring")  WorldModel::WorldModel "WorldModel::WorldModel(void *ptrRobotWorld) ";
 
 %feature("docstring")  WorldModel::WorldModel "WorldModel::WorldModel(int index) ";
 
 %feature("docstring")  WorldModel::WorldModel "WorldModel::WorldModel(const WorldModel &w) ";
 
 %feature("docstring")  WorldModel::~WorldModel "WorldModel::~WorldModel() ";
+
+%feature("docstring")  WorldModel::copy "WorldModel
+WorldModel::copy()
+
+Creates a copy of the world model. Note that geometries and
+appearances are shared... ";
 
 %feature("docstring")  WorldModel::readFile "bool
 WorldModel::readFile(const char *fn)
@@ -1917,6 +2281,43 @@ Loads some element from a file, automatically detecting its type.
 Meshes are interpreted as terrains. The ID is returned, or -1 if
 loading failed. ";
 
+%feature("docstring")  WorldModel::add "RobotModel
+WorldModel::add(const char *name, const RobotModel &robot)
+
+Adds a copy of the given robot to this world, either from this
+WorldModel or another. ";
+
+%feature("docstring")  WorldModel::add "RigidObjectModel
+WorldModel::add(const char *name, const RigidObjectModel &obj)
+
+Adds a copy of the given rigid object to this world, either from this
+WorldModel or another. ";
+
+%feature("docstring")  WorldModel::add "TerrainModel
+WorldModel::add(const char *name, const TerrainModel &terrain)
+
+Adds a copy of the given terrain to this world, either from this
+WorldModel or another. ";
+
+%feature("docstring")  WorldModel::remove "void
+WorldModel::remove(const RobotModel &robot)
+
+Removes a robot. It must be in this world or an exception is raised.
+IMPORTANT: all other references to robots will be invalidated. ";
+
+%feature("docstring")  WorldModel::remove "void
+WorldModel::remove(const RigidObjectModel &object)
+
+Removes a rigid object. It must be in this world or an exception is
+raised. IMPORTANT: all other references to rigid objects will be
+invalidated. ";
+
+%feature("docstring")  WorldModel::remove "void
+WorldModel::remove(const TerrainModel &terrain)
+
+Removes a terrain. It must be in this world or an exception is raised.
+IMPORTANT: all other references to terrains will be invalidated. ";
+
 %feature("docstring")  WorldModel::getName "std::string
 WorldModel::getName(int id)
 
@@ -1944,6 +2345,17 @@ loaded from disk, and no geometry / visualization / collision
 detection structures will be loaded. Useful for quick scripts that
 just use kinematics / dynamics of a robot. ";
 
+%feature("docstring")  WorldModel::enableInitCollisions "void
+WorldModel::enableInitCollisions(bool enabled)
+
+If collision detection is set to true, then collision acceleration
+data structures will be automatically initialized, with debugging
+information. Useful for scripts that do planning and for which
+collision initialization may take a long time. Note that even when
+this flag is off, the collision acceleration data structures will
+indeed be initialized whenever geometry collision, distance, or ray-
+casting routines are called. ";
+
 
 // File: namespacestd.xml
 
@@ -1957,11 +2369,28 @@ seed)
 
 Sets the random seed used by the motion planner. ";
 
+%feature("docstring")  std::ToPy "PyObject* ToPy(int x) ";
+
+%feature("docstring")  std::ToPy "PyObject* ToPy(double x) ";
+
+%feature("docstring")  std::ToPy "PyObject* ToPy(const string &x) ";
+
+%feature("docstring")  std::ToPy "PyObject* ToPy(const std::vector< T
+> &x) ";
+
+%feature("docstring")  std::ToPy "PyObject* ToPy(const Config &x) ";
+
 %feature("docstring")  std::PyListFromVector "PyObject*
 PyListFromVector(const std::vector< double > &x) ";
 
 %feature("docstring")  std::PyListToVector "bool
 PyListToVector(PyObject *seq, std::vector< double > &x) ";
+
+%feature("docstring")  std::PyListFromConfig "PyObject*
+PyListFromConfig(const Config &x) ";
+
+%feature("docstring")  std::PyListToConfig "bool
+PyListToConfig(PyObject *seq, Config &x) ";
 
 %feature("docstring")  std::makeNewCSpace "int makeNewCSpace() ";
 
@@ -2192,7 +2621,8 @@ GeneralizedIKObjective &obj, double out[9], double out2[3]) ";
 
 
 // File: robotsim_8cpp.xml
-%feature("docstring")  createWorld "int createWorld() ";
+%feature("docstring")  createWorld "int createWorld(RobotWorld
+*ptr=NULL) ";
 
 %feature("docstring")  derefWorld "void derefWorld(int index) ";
 
@@ -2207,6 +2637,9 @@ GeneralizedIKObjective &obj, double out[9], double out2[3]) ";
 %feature("docstring")  derefWidget "void derefWidget(int index) ";
 
 %feature("docstring")  refWidget "void refWidget(int index) ";
+
+%feature("docstring")  GetManagedGeometry "ManagedGeometry&
+GetManagedGeometry(RobotWorld &world, int id) ";
 
 %feature("docstring")  MakeController "MyController*
 MakeController(Robot *robot) ";
@@ -2241,6 +2674,14 @@ double > &v) ";
 %feature("docstring")  copy "void copy(const Matrix &mat, vector<
 vector< double > > &v) ";
 
+%feature("docstring")  push_back "world terrains push_back(new
+Terrain) ";
+
+%feature("docstring")  back "* world terrains back() ";
+
+%feature("docstring")  terrain "return
+terrain(world.terrains.size()-1) ";
+
 %feature("docstring")  GetCameraViewport "Camera::Viewport
 GetCameraViewport(const Viewport &viewport) ";
 
@@ -2261,7 +2702,15 @@ Sets the termination threshold for the change in x. ";
 *pVFObj)
 
 Sets the vector field object, returns 0 if pVFObj = NULL, 1 otherwise.
-";
+See vectorfield.py for an abstract base class that can be overridden
+to produce one of these objects. ";
+
+%feature("docstring")  setFunction "int setFunction(PyObject *pVFObj)
+
+Sets the function object, returns 0 if pVFObj = NULL, 1 otherwise. See
+vectorfield.py for an abstract base class that can be overridden to
+produce one of these objects. Equivalent to setVectorField; just a
+more intuitive name. ";
 
 %feature("docstring")  PyListFromVector "PyObject*
 PyListFromVector(const Vector &x) ";
@@ -2308,7 +2757,15 @@ Sets the termination threshold for the change in x. ";
 *pVFObj)
 
 Sets the vector field object, returns 0 if pVFObj = NULL, 1 otherwise.
-";
+See vectorfield.py for an abstract base class that can be overridden
+to produce one of these objects. ";
+
+%feature("docstring")  setFunction "int setFunction(PyObject *pVFObj)
+
+Sets the function object, returns 0 if pVFObj = NULL, 1 otherwise. See
+vectorfield.py for an abstract base class that can be overridden to
+produce one of these objects. Equivalent to setVectorField; just a
+more intuitive name. ";
 
 %feature("docstring")  findRoots "PyObject* findRoots(PyObject
 *startVals, int iter)

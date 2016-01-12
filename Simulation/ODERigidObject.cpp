@@ -3,7 +3,7 @@
 #include "ODECustomGeometry.h"
 #include "Settings.h"
 #include <ode/ode.h>
-#include <errors.h>
+#include <KrisLibrary/errors.h>
 
 double ODERigidObject::defaultPadding = gDefaultRigidObjectPadding;
 ODESurfaceProperties ODERigidObject::defaultSurface = {0.1,0.5,Inf,Inf};
@@ -37,7 +37,7 @@ void ODERigidObject::Create(dWorldID worldID,dSpaceID space,bool useBoundaryLaye
   dBodySetMass(bodyID,&mass);
   
   geometry = new ODEGeometry;
-  geometry->Create(&obj.geometry,spaceID,-obj.com,useBoundaryLayer);
+  geometry->Create(&*obj.geometry,spaceID,-obj.com,useBoundaryLayer);
   dGeomSetBody(geometry->geom(),bodyID);
   dGeomSetData(geometry->geom(),(void*)-1);
   geometry->SetPadding(defaultPadding);

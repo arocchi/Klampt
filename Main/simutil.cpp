@@ -4,8 +4,8 @@
 #include "Simulation/WorldSimulation.h"
 #include "IO/XmlWorld.h"
 #include "IO/XmlODE.h"
-#include <utils/stringutils.h>
-#include <robotics/IKFunctions.h>
+#include <KrisLibrary/utils/stringutils.h>
+#include <KrisLibrary/robotics/IKFunctions.h>
 #include <fstream>
 using namespace Math3D;
 
@@ -273,7 +273,7 @@ int main(int argc, char** argv)
   //setup controllers
   sim.robotControllers.resize(world.robots.size());
   for(size_t i=0;i<sim.robotControllers.size();i++) {    
-    Robot* robot=world.robots[i].robot;
+    Robot* robot=world.robots[i];
     sim.SetController(i,MakeDefaultController(robot)); 
     MakeDefaultSensors(robot,sim.controlSimulators[i].sensors);
   }
@@ -295,12 +295,12 @@ int main(int argc, char** argv)
     sim.EnableContactFeedback(world.RigidObjectID(i),world.TerrainID(0));
   //robot-object
   for(size_t i=0;i<world.rigidObjects.size();i++) {
-    for(size_t j=0;j<world.robots[0].robot->links.size();j++) {
+    for(size_t j=0;j<world.robots[0]->links.size();j++) {
       sim.EnableContactFeedback(world.RigidObjectID(i),world.RobotLinkID(0,j));
     }
   }
   for(size_t i=0;i<world.terrains.size();i++) {
-    for(size_t j=0;j<world.robots[0].robot->links.size();j++) {
+    for(size_t j=0;j<world.robots[0]->links.size();j++) {
       sim.EnableContactFeedback(world.TerrainID(i),world.RobotLinkID(0,j));
     }
   }

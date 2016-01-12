@@ -1,10 +1,10 @@
 #ifndef OBJECT_POSE_WIDGET_H
 #define OBJECT_POSE_WIDGET_H
 
-#include <GLdraw/Widget.h>
-#include <GLdraw/TransformWidget.h>
-#include <robotics/IK.h>
-#include "ViewRigidObject.h"
+#include <KrisLibrary/GLdraw/Widget.h>
+#include <KrisLibrary/GLdraw/TransformWidget.h>
+#include <KrisLibrary/robotics/IK.h>
+#include "Modeling/RigidObject.h"
 
 /** @addtogroup View */
 /** @{ */
@@ -16,8 +16,8 @@ class RigidObjectPoseWidget : public GLDraw::WidgetSet
 {
 public:
   RigidObjectPoseWidget();
-  RigidObjectPoseWidget(RigidObject* object,ViewRigidObject* viewObject);
-  void Set(RigidObject* object,ViewRigidObject* viewObject);
+  RigidObjectPoseWidget(RigidObject* object);
+  void Set(RigidObject* object);
 
   const RigidTransform& Pose() const { return poser.T; }
   void SetPose(const RigidTransform& q);

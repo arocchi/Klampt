@@ -1,9 +1,9 @@
 #include "ODECustomGeometry.h"
 #include "ODECommon.h"
-#include <geometry/CollisionPointCloud.h>
+#include <KrisLibrary/geometry/CollisionPointCloud.h>
 #include <ode/collision.h>
-#include <Timer.h>
-#include <errors.h>
+#include <KrisLibrary/Timer.h>
+#include <KrisLibrary/errors.h>
 using namespace std;
 
 //if a normal has this length then it is ignored
@@ -24,6 +24,8 @@ const static bool gDoTriangleTriangleCollisionDetection = false;
 
 //doesn't consider unique contact points if they are between this tolerance
 const static Real cptol=1e-5;
+
+static bool gCustomGeometryMeshesIntersect = false;
 
 int gdCustomGeometryClass = 0;
 
@@ -97,9 +99,10 @@ Vector3 VertexNormal(const CollisionMesh& m,int tri,int vnum)
     return Vector3(0.0);
     FatalError("VertexNormal: mesh is not properly initialized with incidentTris array?");
   }
-  Assert(tri >= 0 && tri < m.incidentTris.size());
   Assert(vnum >= 0 && vnum < 3);
   int v=m.tris[tri][vnum];
+  Assert(v >= 0 && v < m.incidentTris.size());
+  if(m.incidentTris[v].empty()) return Vector3(0.0);
   Vector3 n(Zero);
   for(size_t i=0;i<m.incidentTris[v].size();i++)
     n += m.TriangleNormal(m.incidentTris[v][i]);
@@ -394,8 +397,9 @@ int MeshMeshCollide(CollisionMesh& m1,Real outerMargin1,CollisionMesh& m2,Real o
     tri1loc.b = T12*tri1.b;
     tri1loc.c = T12*tri1.c;
     if(tri1loc.intersects(tri2)) { 
+      gCustomGeometryMeshesIntersect = true;
       if(warnedCount % 1000 == 0) {
-	printf("ODECustomMesh: Triangles penetrate margin %g: can't trust contact detector\n",tol);
+	printf("ODECustomMesh: Triangles penetrate margin %g+%g: can't trust contact detector\n",outerMargin1,outerMargin2);
       }
       warnedCount++;
       /*
@@ -410,7 +414,7 @@ int MeshMeshCollide(CollisionMesh& m1,Real outerMargin1,CollisionMesh& m2,Real o
     }
   }
   if(t1.size() != imax) {
-    printf("ODECustomMesh: %d candidate points were removed due to collision\n",t1.size()-imax);
+    printf("ODECustomMesh: %d candidate points were removed due to mesh collision\n",t1.size()-imax);
     t1.resize(imax);
     t2.resize(imax);
     cp1.resize(imax);
@@ -858,4 +862,14 @@ void InitODECustomGeometry()
   mmclass.aabb_test = NULL;
   mmclass.dtor = dCustomGeometryDtor;
   gdCustomGeometryClass = dCreateGeomClass(&mmclass);
+}
+
+bool GetCustomGeometryCollisionReliableFlag()
+{
+  return !gCustomGeometryMeshesIntersect;
+}
+
+void ClearCustomGeometryCollisionReliableFlag()
+{
+  gCustomGeometryMeshesIntersect = false;
 }

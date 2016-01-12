@@ -1,9 +1,9 @@
 #include <string>
 #include <vector>
 #include "robotik.h"
-#include <robotics/IKFunctions.h>
-#include <math/random.h>
-#include <math3d/random.h>
+#include <KrisLibrary/robotics/IKFunctions.h>
+#include <KrisLibrary/math/random.h>
+#include <KrisLibrary/math3d/random.h>
 #include <Python.h>
 #include "Modeling/World.h"
 #include "pyerr.h"
@@ -95,6 +95,50 @@ void IKObjective::setRelativeTransform(int link,int linkTgt,const double R[9],co
   goal.SetFixedPosition(Vector3(t));
 }
 
+void IKObjective::setLinks(int link,int link2)
+{
+  goal.link = link;
+  goal.destLink = link2;
+}
+
+void IKObjective::setFreePosition()
+{
+  goal.SetFreePosition();
+}
+
+void IKObjective::setFixedPosConstraint(const double tlocal[3],const double tworld[3])
+{
+  goal.localPosition.set(tlocal);
+  goal.SetFixedPosition(tworld);
+}
+
+void IKObjective::setPlanarPosConstraint(const double tlocal[3],const double nworld[3],double oworld)
+{
+  goal.localPosition.set(tlocal);
+  goal.SetPlanarPosition(Vector3(nworld)*oworld,Vector3(nworld));
+}
+
+void IKObjective::setLinearPosConstraint(const double tlocal[3],const double sworld[3],const double dworld[3])
+{
+  goal.localPosition.set(tlocal);
+  goal.SetLinearPosition(sworld,dworld);
+}
+
+void IKObjective::setFreeRotConstraint()
+{
+  goal.SetFreeRotation();
+}
+
+void IKObjective::setFixedRotConstraint(const double R[9])
+{
+  goal.SetFixedRotation(Matrix3(R));
+}
+
+void IKObjective::setAxialRotConstraint(const double alocal[3],const double aworld[3])
+{
+  goal.SetAxisRotation(alocal,aworld);
+}
+
 int IKObjective::numPosDims() const
 {
   return IKGoal::NumDims(goal.posConstraint);
@@ -147,6 +191,20 @@ void IKObjective::getTransform(double out[9],double out2[3]) const
   }
 }
 
+bool IKObjective::loadString(const char* str)
+{
+  stringstream ss(str);
+  ss>>goal;
+  if(ss) return true;
+  return false;
+}
+
+std::string IKObjective::saveString() const
+{
+  stringstream ss;
+  ss<<goal;
+  return ss.str();
+}
 
 GeneralizedIKObjective::GeneralizedIKObjective(const GeneralizedIKObjective& obj)
   :link1(obj.link1),link2(obj.link2),obj1(obj.obj1),obj2(obj.obj2),
@@ -214,7 +272,7 @@ IKSolver::IKSolver(const RobotModel& _robot)
 {}
 
 IKSolver::IKSolver(const IKSolver& solver)
-  :robot(solver.robot),objectives(solver.objectives),useJointLimits(solver.useJointLimits),activeDofs(solver.activeDofs),qmin(solver.qmin),qmax(solver.qmax)
+  :robot(solver.robot),objectives(solver.objectives),activeDofs(solver.activeDofs),useJointLimits(solver.useJointLimits),qmin(solver.qmin),qmax(solver.qmax)
 {}
 
 void IKSolver::add(const IKObjective& objective)
@@ -244,18 +302,32 @@ void IKSolver::getActiveDofs(std::vector<int>& out)
 
 void IKSolver::setJointLimits(const std::vector<double>& _qmin,const std::vector<double>& _qmax)
 {
-  qmin = _qmin;
-  qmax = _qmax;
+  if(_qmin.empty()) {
+    useJointLimits=false;
+    qmin.resize(0);
+    qmax.resize(0);
+  }
+  else {
+    qmin = _qmin;
+    qmax = _qmax;
+    useJointLimits = true;
+  }
 }
 
 void IKSolver::getJointLimits(std::vector<double>& out,std::vector<double>& out2)
 {
-  if(qmin.empty()) {
-    robot.getJointLimits(out,out2);
+  if(!useJointLimits) {
+    out.resize(0);
+    out2.resize(0);
   }
   else {
-    out = qmin;
-    out2 = qmax;
+    if(qmin.empty()) {
+      robot.getJointLimits(out,out2);
+    }
+    else {
+      out = qmin;
+      out2 = qmax;
+    }
   }
 }
 
@@ -339,8 +411,14 @@ void IKSolver::sampleInitial()
 {
   vector<int> active;
   getActiveDofs(active);
-  for(size_t i=0;i<active.size();i++)
-    robot.robot->q(active[i]) = Rand(robot.robot->qMin(active[i]),robot.robot->qMax(active[i]));
+  if(qmin.empty()) {
+    for(size_t i=0;i<active.size();i++)
+      robot.robot->q(active[i]) = Rand(robot.robot->qMin(active[i]),robot.robot->qMax(active[i]));
+  }
+  else {
+    for(size_t i=0;i<active.size();i++)
+      robot.robot->q(active[i]) = Rand(qmin[active[i]],qmax[active[i]]);
+  }
   robot.robot->UpdateFrames();
 }
 

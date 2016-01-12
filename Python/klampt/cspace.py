@@ -94,7 +94,7 @@ class CSpace:
             self.cspace.setDistance(getattr(self,'distance'))
         if hasattr(self,'interpolate'):
             self.cspace.setInterpolate(getattr(self,'interpolate'))
-        for (k,v) in self.properties:
+        for (k,v) in self.properties.iteritems():
             if isinstance(v,(list,tuple)):
                 self.cspace.setPropety(k," ".join([str(item) for item in v]))
             else:
@@ -107,6 +107,13 @@ class CSpace:
         to the desired bound.
         """
         return [random.uniform(*b) for b in self.bound]
+
+    def sampleneighborhood(self,c,r):
+        """Overload this to define a nonuniform sampler.
+        By default, it will sample from the axis-aligned box of radius r
+        around c, but clamped to the bound.
+        """
+        return [random.uniform(max(b[0],ci-r),min(b[1],ci+r)) for ci,b in zip(c,self.bound)]
 
     def feasible(self,x):
         """Overload this to define your new feasibility test"""
@@ -156,6 +163,7 @@ class MotionPlan:
             motionplanning.setPlanType(type)
         if len(options) > 0:
             MotionPlan.setOptions(**options)
+        self.space = space
         self.planner = motionplanning.PlannerInterface(space.cspace)
 
     def close(self):
@@ -205,7 +213,10 @@ class MotionPlan:
                 motionplanning.setPlanSetting(a,float(b))
 
     def setEndpoints(self,start,goal):
-        """Sets the start and goal configuration."""
+        """Sets the start and goal configuration.  goal can also be a
+        *goal test*, which is a function taking one argument f(q) that
+        returns true if the configuration is at the goal and false
+        otherwise."""
         self.planner.setEndpoints(start,goal)
 
     def addMilestone(self,x):

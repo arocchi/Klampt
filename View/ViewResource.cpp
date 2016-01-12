@@ -1,12 +1,12 @@
 #include "ViewResource.h"
 #include "Planning/RobotCSpace.h"
 #include "Planning/RobotTimeScaling.h"
-#include <math/interpolate.h>
+#include <KrisLibrary/math/interpolate.h>
 #include "Modeling/Interpolate.h"
-#include <GLdraw/drawgeometry.h>
-#include <GLdraw/GL.h>
-#include <GLdraw/drawextra.h>
-#include <robotics/IKFunctions.h>
+#include <KrisLibrary/GLdraw/drawgeometry.h>
+#include <KrisLibrary/GLdraw/GL.h>
+#include <KrisLibrary/GLdraw/drawextra.h>
+#include <KrisLibrary/robotics/IKFunctions.h>
 #include <sstream>
 using namespace GLDraw;
 
@@ -181,11 +181,12 @@ void ViewResource::SetRobot(Robot* robot)
   configViewer.robot = robot;
   configsViewer.robot = robot;
   pathViewer.robot = robot;
-  /*
-  configViewer.SetGrey();
-  configsViewer.SetGrey();
-  pathViewer.SetGrey();
-  */
+  configViewer.RestoreAppearance();
+  configsViewer.RestoreAppearance();
+  pathViewer.RestoreAppearance();
+  configViewer.PushAppearance();
+  configsViewer.PushAppearance();
+  pathViewer.PushAppearance();
   configViewer.SetColors(GLColor(0.5,0.5,0.5,0.7));
   configsViewer.SetColors(GLColor(0.5,0.5,0.5,0.7));
   pathViewer.SetColors(GLColor(0.5,0.5,0.5,0.7));

@@ -1,9 +1,9 @@
 #include "Planning/RobotCSpace.h"
-#include <planning/AnyMotionPlanner.h>
+#include <KrisLibrary/planning/AnyMotionPlanner.h>
 #include "IO/XmlWorld.h"
 #include "Modeling/MultiPath.h"
-#include <utils/ioutils.h>
-#include <utils/stringutils.h>
+#include <KrisLibrary/utils/ioutils.h>
+#include <KrisLibrary/utils/stringutils.h>
 #include <string.h>
 #include <time.h>
 #include <fstream>
@@ -27,10 +27,10 @@ void DynamicShortcut(RobotWorld& world,int robot,const MilestonePath& path,int m
 {
   //1. Make initial start-and-stop path.
   //set up joint/velocity/acceleration limits
-  dynamicPath.xMin = world.robots[robot].robot->qMin;
-  dynamicPath.xMax = world.robots[robot].robot->qMax;
-  dynamicPath.velMax = world.robots[robot].robot->velMax;
-  dynamicPath.accMax = world.robots[robot].robot->accMax;
+  dynamicPath.xMin = world.robots[robot]->qMin;
+  dynamicPath.xMax = world.robots[robot]->qMax;
+  dynamicPath.velMax = world.robots[robot]->velMax;
+  dynamicPath.accMax = world.robots[robot]->accMax;
   //extract milestones from MilestonePath
   vector<ParabolicRamp::Vector> milestones(path.NumMilestones());
   for(size_t i=0;i<milestones.size();i++)
@@ -60,6 +60,12 @@ void DynamicShortcut(RobotWorld& world,int robot,const MilestonePath& path,int m
 bool SimplePlan(RobotWorld& world,int robot,const Config& qstart,const Config& qgoal,MilestonePath& path,
 		const HaltingCondition& cond,const string& plannerSettings="")
 {
+  ///If you don't call this, everything will run fine due to on-demand
+  ///collision initialization, but at least here you get some debug information
+  ///if your world is really complex and the collision detection structures
+  ///take a long time to initialize.
+  world.InitCollisions();
+
   WorldPlannerSettings settings;
   settings.InitializeDefault(world);
   SingleRobotCSpace cspace(world,robot,&settings); 
@@ -210,7 +216,7 @@ int main(int argc,const char** argv)
     cmdline += argv[i];
   }
   MultiPath path;
-  path.settings["robot"] = world.robots[robot].name;
+  path.settings["robot"] = world.robots[robot]->name;
   path.settings["command"] = cmdline;
   //begin planning
   bool feasible = true;

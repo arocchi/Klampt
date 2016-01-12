@@ -1,6 +1,6 @@
 #include "XmlODE.h"
 #include "Control/Controller.h"
-#include <utils/stringutils.h>
+#include <KrisLibrary/utils/stringutils.h>
 
 XmlODEGeometry::XmlODEGeometry(TiXmlElement* _element)
   :e(_element)
@@ -63,10 +63,13 @@ bool XmlODESettings::GetSettings(ODESimulator& sim)
     int maxContacts;
     if(c->QueryValueAttribute("maxContacts",&maxContacts)==TIXML_SUCCESS)
       sim.GetSettings().maxContacts = maxContacts;
-    int boundaryLayer,rigidObjectCollisions,robotSelfCollisions,robotRobotCollisions;
+    int boundaryLayer,adaptiveTimeStepping,rigidObjectCollisions,robotSelfCollisions,robotRobotCollisions;
     if(c->QueryValueAttribute("boundaryLayer",&boundaryLayer)==TIXML_SUCCESS) {
       printf("XML simulator: warning, boundary layer settings don't have an effect after world is loaded\n");
       sim.GetSettings().boundaryLayerCollisions = boundaryLayer;
+    }
+    if(c->QueryValueAttribute("adaptiveTimeStepping",&adaptiveTimeStepping)==TIXML_SUCCESS) {
+      sim.GetSettings().adaptiveTimeStepping = adaptiveTimeStepping;
     }
     if(c->QueryValueAttribute("rigidObjectCollisions",&rigidObjectCollisions)==TIXML_SUCCESS)
       sim.GetSettings().rigidObjectCollisions = rigidObjectCollisions;
@@ -83,11 +86,11 @@ bool XmlODESettings::GetSettings(ODESimulator& sim)
     if(0 == strcmp(name,"terrain")) {
       int index;
       if(c->QueryValueAttribute("index",&index)==TIXML_SUCCESS) {
-	Assert(index < (int)sim.numEnvs());
+	Assert(index < (int)sim.numTerrains());
 	TiXmlElement* eg=c->FirstChildElement("geometry");
 	if(eg) {
 	  XmlODEGeometry g(eg);
-	  if(!g.Get(*sim.envGeom(index))) {
+	  if(!g.Get(*sim.terrainGeom(index))) {
 	    fprintf(stderr,"Error reading terrain geometry from XML\n");
 	    return false;
 	  }

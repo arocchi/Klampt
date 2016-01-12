@@ -3,9 +3,9 @@
 #include "ODECustomGeometry.h"
 #include "Modeling/RigidObject.h"
 #include <ode/ode.h>
-#include <math/angle.h>
-#include <math3d/interpolate.h>
-#include <robotics/Rotation.h>
+#include <KrisLibrary/math/angle.h>
+#include <KrisLibrary/math3d/interpolate.h>
+#include <KrisLibrary/robotics/Rotation.h>
 #include "Settings.h"
 
 double ODERobot::defaultPadding = gDefaultRobotPadding;
@@ -181,7 +181,7 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
 	Assert(indices[j] != baseLink);
 	Assert(robot.links[indices[j]].mass == 0.0);
 	Assert(robot.links[indices[j]].inertia.isZero());
-	Assert(robot.geometry[indices[j]].Empty());
+	Assert(robot.IsGeometryEmpty(indices[j]));
       }
     }
     if(bodyJoints[i].size()==1) { //single joint
@@ -190,9 +190,9 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
       bodyObjects[i].inertia = robot.links[baseLink].inertia;
       bodyObjects[i].T.R = robot.links[baseLink].T_World.R; 
       bodyObjects[i].T.t = robot.links[baseLink].T_World * robot.links[baseLink].com; 
-      if(!robot.geometry[baseLink].Empty()) {
+      if(!robot.IsGeometryEmpty(baseLink)) {
 	bodyGeometry[i] = new ODEGeometry;
-	bodyGeometry[i]->Create(&robot.geometry[baseLink],spaceID,-robot.links[baseLink].com,useBoundaryLayer);
+	bodyGeometry[i]->Create(robot.geometry[baseLink],spaceID,-robot.links[baseLink].com,useBoundaryLayer);
       }
     }
     else {
@@ -204,7 +204,7 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
       bodyObjects[i].inertia.setZero();
       for(size_t j=0;j<bodyLinks[i].size();j++) {
 	int link = bodyLinks[i][j];
-	if(robot.links[link].mass==0) continue;
+	if(robot.links[link].mass==0 || robot.IsGeometryEmpty(link)) continue;
 	bodyObjects[i].mass += robot.links[link].mass;
 	RigidTransform Trel;
 	Trel.mulInverseA(robot.links[baseLink].T_World,robot.links[link].T_World);
@@ -217,7 +217,7 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
 	bodyObjects[i].inertia += (inertiaLink*robot.links[link].mass);
 
 	//get transformed mesh
-	meshes[j] = robot.geometry[link];
+	meshes[j] = *robot.geometry[link];
 	meshes[j].Transform(Trel);
       }
       bodyObjects[i].com /= bodyObjects[i].mass;
@@ -230,7 +230,6 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
       tempGeometries.resize(tempGeometries.size()+1);
       tempGeometries.back() = new RobotWithGeometry::CollisionGeometry;
       tempGeometries.back()->Merge(meshes);
-      tempGeometries.back()->InitCollisions();
       if(!tempGeometries.back()->Empty()) {
 	bodyGeometry[i] = new ODEGeometry;
 	bodyGeometry[i]->Create(tempGeometries.back(),spaceID,-bodyObjects[i].com,useBoundaryLayer);

@@ -9,16 +9,17 @@
 #include "Modeling/Interpolate.h"
 #include "IO/XmlWorld.h"
 #include "IO/XmlODE.h"
-#include <robotics/NewtonEuler.h>
-#include <meshing/PointCloud.h>
-#include <GLdraw/drawextra.h>
-#include <GLdraw/drawMesh.h>
-#include <GLdraw/Widget.h>
-#include <GLdraw/TransformWidget.h>
+#include "IO/ROS.h"
+#include <KrisLibrary/robotics/NewtonEuler.h>
+#include <KrisLibrary/meshing/PointCloud.h>
+#include <KrisLibrary/GLdraw/drawextra.h>
+#include <KrisLibrary/GLdraw/drawMesh.h>
+#include <KrisLibrary/GLdraw/Widget.h>
+#include <KrisLibrary/GLdraw/TransformWidget.h>
 #include "View/ObjectPoseWidget.h"
 #include "View/RobotPoseWidget.h"
-#include <utils/AnyCollection.h>
-#include <utils/stringutils.h>
+#include <KrisLibrary/utils/AnyCollection.h>
+#include <KrisLibrary/utils/stringutils.h>
 #include <ode/ode.h>
 #include <fstream>
 #ifndef WIN32
@@ -28,7 +29,8 @@
 /// Internally used.
 struct WorldData
 {
-  RobotWorld world;
+  RobotWorld* world;
+  bool worldExternal;
   XmlWorld xmlWorld;
   int refCount;
 };
@@ -57,10 +59,20 @@ static list<int> simDeleteList;
 static vector<WidgetData> widgets;
 static list<int> widgetDeleteList;
 
-int createWorld()
+static bool gEnableCollisionInitialization = false;
+
+int createWorld(RobotWorld* ptr=NULL)
 {
   if(worldDeleteList.empty()) {
     worlds.push_back(new WorldData);
+    if(ptr) {
+      worlds.back()->world = ptr;
+      worlds.back()->worldExternal = true;
+    }
+    else {
+      worlds.back()->world = new RobotWorld;
+      worlds.back()->worldExternal = false;
+    }
     worlds.back()->refCount = 1;
     return (int)(worlds.size()-1);
   }
@@ -68,6 +80,14 @@ int createWorld()
     int index = worldDeleteList.front();
     worldDeleteList.erase(worldDeleteList.begin());
     worlds[index] = new WorldData;
+    if(ptr) {
+      worlds[index]->world = ptr;
+      worlds[index]->worldExternal = true;
+    }
+    else {
+      worlds[index]->world = new RobotWorld;
+      worlds[index]->worldExternal = false;
+    }
     worlds[index]->refCount = 1;
     return index;
   }
@@ -86,6 +106,8 @@ void derefWorld(int index)
   //printf("Deref world %d: count %d\n",index,worlds[index]->refCount);
   if(worlds[index]->refCount == 0) {
     //printf("Deleting world %d\n",index);
+    if(!worlds[index]->worldExternal)
+      delete worlds[index]->world;
     worlds[index] = NULL;
     worldDeleteList.push_back(index);
   }
@@ -131,6 +153,7 @@ int createWidget()
   if(widgetDeleteList.empty()) {
     widgets.resize(widgets.size()+1);
     widgets.back().refCount = 1;
+    //printf("Creating widget %d, ref count %d\n",widgets.size()-1,1);
     return (int)(widgets.size()-1);
   }
   else {
@@ -138,6 +161,7 @@ int createWidget()
     widgetDeleteList.erase(widgetDeleteList.begin());
     widgets[index].widget = NULL;
     widgets[index].refCount = 1;
+    //printf("Creating widget %d, ref count %d\n",index,1);
     return index;
   }
 }
@@ -150,7 +174,7 @@ void derefWidget(int index)
     throw PyException("Invalid dereference");
 
   widgets[index].refCount--;
-  //printf("Deref widget %d: count %d\n",index,widgets[index]->refCount);
+  //printf("Deref widget %d: count %d\n",index,widgets[index].refCount);
   if(widgets[index].refCount == 0) {
     //printf("Deleting widget %d\n",index);
     widgets[index].widget = NULL;
@@ -163,9 +187,25 @@ void refWidget(int index)
   if(index < 0 || index >= (int)widgets.size())
     throw PyException("Invalid widget index");
   widgets[index].refCount++;
-  //printf("Ref widget %d: count %d\n",index,widgets[index]->refCount);
+  //printf("Ref widget %d: count %d\n",index,widgets[index].refCount);
 }
 
+
+ManagedGeometry& GetManagedGeometry(RobotWorld& world,int id)
+{
+  int terrain = world.IsTerrain(id);
+  if(terrain >= 0)
+    return world.terrains[terrain]->geometry;
+  int rigidObject = world.IsRigidObject(id);
+  if(rigidObject >= 0)
+    return world.rigidObjects[rigidObject]->geometry;
+  pair<int,int> robotLink = world.IsRobotLink(id);
+  if(robotLink.first >= 0) {
+    return world.robots[robotLink.first]->geomManagers[robotLink.second];
+  }
+  fprintf(stderr,"GetManagedGeometry(): Invalid ID: %d\n",id);
+  return world.robots[0]->geomManagers[0];
+}
 
 
 class ManualOverrideController : public RobotController
@@ -285,7 +325,7 @@ void GetMesh(const TriangleMesh& tmesh,Geometry::AnyCollisionGeometry3D& geom)
   for(size_t i=0;i<mesh.verts.size();i++)
     mesh.verts[i].set(tmesh.vertices[i*3],tmesh.vertices[i*3+1],tmesh.vertices[i*3+2]);
   geom = mesh;
-  geom.InitCollisions();
+  geom.ClearCollisionData();
 }
 
 
@@ -309,13 +349,16 @@ void GetPointCloud(const PointCloud& pc,Geometry::AnyCollisionGeometry3D& geom)
   for(size_t i=0;i<gpc.points.size();i++)
     gpc.points[i].set(pc.vertices[i*3],pc.vertices[i*3+1],pc.vertices[i*3+2]);
   gpc.propertyNames = pc.propertyNames;
-  gpc.properties.resize(pc.properties.size() / pc.propertyNames.size());
-  for(size_t i=0;i<gpc.properties.size();i++) {
-    gpc.properties[i].resize(pc.propertyNames.size());
-    gpc.properties[i].copy(&pc.properties[i*pc.propertyNames.size()]);
+  if(pc.propertyNames.size() > 0) {
+    gpc.properties.resize(pc.properties.size() / pc.propertyNames.size());
+    for(size_t i=0;i<gpc.properties.size();i++) {
+      gpc.properties[i].resize(pc.propertyNames.size());
+      gpc.properties[i].copy(&pc.properties[i*pc.propertyNames.size()]);
+    }
   }
+  printf("Copying PointCloud to geometry, %d points\n",gpc.points.size());
   geom = gpc;
-  geom.InitCollisions();
+  geom.ClearCollisionData();
 }
 
 void GeometricPrimitive::setPoint(const double pt[3])
@@ -403,11 +446,12 @@ void Geometry3D::set(const Geometry3D& g)
     *geom = *ggeom;
   }
   AnyCollisionGeometry3D* geom = reinterpret_cast<AnyCollisionGeometry3D*>(geomPtr);
-  geom->InitCollisions();
+  geom->ClearCollisionData();
   if(!isStandalone()) {
-    //update the display list
-    RobotWorld& world=worlds[this->world]->world;
-    world.GetAppearance(id).Set(*geom);
+    //update the display list / cache
+    RobotWorld& world=*worlds[this->world]->world;
+    world.GetAppearance(id)->Set(*geom);
+    GetManagedGeometry(world,id).RemoveFromCache();
   }
 }
 
@@ -473,9 +517,10 @@ void Geometry3D::setTriangleMesh(const TriangleMesh& mesh)
   AnyCollisionGeometry3D* geom = reinterpret_cast<AnyCollisionGeometry3D*>(geomPtr);
   GetMesh(mesh,*geom);
   if(!isStandalone()) {
-    //update the display list
-    RobotWorld& world=worlds[this->world]->world;
-    world.GetAppearance(id).Set(*geom);
+    //update the display list / cache
+    RobotWorld& world=*worlds[this->world]->world;
+    world.GetAppearance(id)->Set(*geom);
+    GetManagedGeometry(world,id).RemoveFromCache();
   }
 }
 
@@ -497,9 +542,10 @@ void Geometry3D::setPointCloud(const PointCloud& pc)
   AnyCollisionGeometry3D* geom = reinterpret_cast<AnyCollisionGeometry3D*>(geomPtr);
   GetPointCloud(pc,*geom);
   if(!isStandalone()) {
-    //update the display list
-    RobotWorld& world=worlds[this->world]->world;
-    world.GetAppearance(id).Set(*geom);
+    //update the display list / cache
+    RobotWorld& world=*worlds[this->world]->world;
+    world.GetAppearance(id)->Set(*geom);
+    GetManagedGeometry(world,id).RemoveFromCache();
   }
 }
 
@@ -516,10 +562,12 @@ void Geometry3D::setGeometricPrimitive(const GeometricPrimitive& prim)
     throw PyException("Internal error");
   }
   *geom = g;
-  geom->InitCollisions();
+  geom->ClearCollisionData();
   if(!isStandalone()) {
-    RobotWorld& world=worlds[this->world]->world;
-    world.GetAppearance(id).Set(*geom);
+    //update the display list / cache
+    RobotWorld& world=*worlds[this->world]->world;
+    world.GetAppearance(id)->Set(*geom);
+    GetManagedGeometry(world,id).RemoveFromCache();
   }
 }
 
@@ -529,17 +577,57 @@ bool Geometry3D::loadFile(const char* fn)
   if(!geomPtr) {
     geomPtr = new AnyCollisionGeometry3D();
   }
-  AnyCollisionGeometry3D* geom = reinterpret_cast<AnyCollisionGeometry3D*>(geomPtr);
-  if(!geom->Load(fn)) return false;
-  geom->InitCollisions();
-
-  if(!isStandalone()) {
-    //update the display list
-    RobotWorld& world=worlds[this->world]->world;
-    world.GetAppearance(id).Set(*geom);
+  if(isStandalone()) {
+    AnyCollisionGeometry3D* geom = reinterpret_cast<AnyCollisionGeometry3D*>(geomPtr);
+    if(!geom->Load(fn)) return false;
+  }
+  else {
+    //use the manager, this will automatically figure out caching stuff
+    RobotWorld& world=*worlds[this->world]->world;
+    return GetManagedGeometry(world,id).Load(fn);
   }
   return true;
 }
+
+bool Geometry3D::attachToStream(const char* protocol,const char* name,const char* type)
+{
+  if(0==strcmp(protocol,"ros")) {
+    if(0==strcmp(type,""))
+      type = "PointCloud";
+    if(0 == strcmp(type,"PointCloud")) {
+      if(!geomPtr) 
+        geomPtr = new AnyCollisionGeometry3D();
+      AnyCollisionGeometry3D* geom = reinterpret_cast<AnyCollisionGeometry3D*>(geomPtr);
+      (*geom) = AnyCollisionGeometry3D(Meshing::PointCloud3D());
+      if(!isStandalone()) {
+	RobotWorld& world=*worlds[this->world]->world;
+	GetManagedGeometry(world,id).RemoveFromCache();
+      }
+      return ROSSubscribePointCloud(geom->AsPointCloud(),name);
+      //TODO: update the appearance every time the point cloud changes
+    }
+    else {
+      throw PyException("Geometry3D::attachToStream: Unsupported type argument");
+      return false;
+    }
+  }
+  else {
+    throw PyException("Geometry3D::attachToStream: Unsupported protocol argument");
+    return false;
+  }
+}
+
+bool Geometry3D::detachFromStream(const char* protocol,const char* name)
+{
+  if(0==strcmp(protocol,"ros")) {
+    return ROSDetach(name);
+  }
+  else {
+    throw PyException("Geometry3D::detachFromStream: Unsupported protocol argument");
+    return false;
+  }
+}
+
 
 bool Geometry3D::saveFile(const char* fn)
 {
@@ -567,12 +655,13 @@ void Geometry3D::translate(const double t[3])
   T.R.setIdentity();
   T.t.set(t);
   geom->Transform(T);
-  geom->InitCollisions();
+  geom->ClearCollisionData();
 
   if(!isStandalone()) {
-    //update the display list
-    RobotWorld& world=worlds[this->world]->world;
-    world.GetAppearance(id).Set(*geom);
+    //update the display list / cache
+    RobotWorld& world=*worlds[this->world]->world;
+    world.GetAppearance(id)->Set(*geom);
+    GetManagedGeometry(world,id).RemoveFromCache();
   }
 }
 
@@ -584,12 +673,13 @@ void Geometry3D::transform(const double R[9],const double t[3])
   T.R.set(R);
   T.t.set(t);
   geom->Transform(T);
-  geom->InitCollisions();
+  geom->ClearCollisionData();
 
   if(!isStandalone()) {
-    //update the display list
-    RobotWorld& world=worlds[this->world]->world;
-    world.GetAppearance(id).Set(*geom);
+    //update the display list / cache
+    RobotWorld& world=*worlds[this->world]->world;
+    world.GetAppearance(id)->Set(*geom);
+    GetManagedGeometry(world,id).RemoveFromCache();
   }
 }
 
@@ -681,12 +771,14 @@ Appearance::~Appearance()
   free();
 }
 
-void Appearance::refresh()
+void Appearance::refresh(bool deep)
 {
   if(!appearancePtr) return;
   GLDraw::GeometryAppearance* app = reinterpret_cast<GLDraw::GeometryAppearance*>(appearancePtr);
-  printf("Calling GeometryAppearance::Refresh()\n");
-  app->Refresh();
+  if(deep && app->geom != NULL)
+    app->Set(*app->geom);
+  else
+    app->Refresh();
 }
 
 bool Appearance::isStandalone()
@@ -706,6 +798,10 @@ Appearance Appearance::clone()
 
 void Appearance::set(const Appearance& g)
 {
+  if(!isStandalone()) {
+    RobotWorld& world=*worlds[this->world]->world;
+    GetManagedGeometry(world,id).SetUniqueAppearance();
+  }
   GLDraw::GeometryAppearance* gapp = reinterpret_cast<GLDraw::GeometryAppearance*>(appearancePtr);
   if(appearancePtr == NULL) {
     appearancePtr = new GLDraw::GeometryAppearance(*gapp);
@@ -731,6 +827,10 @@ void Appearance::free()
 void Appearance::setDraw(bool draw)
 {
   if(!appearancePtr) return;
+  if(!isStandalone()) {
+    RobotWorld& world=*worlds[this->world]->world;
+    GetManagedGeometry(world,id).SetUniqueAppearance();
+  }
   GLDraw::GeometryAppearance* app = reinterpret_cast<GLDraw::GeometryAppearance*>(appearancePtr);
   if(draw) {
     app->drawFaces = true;
@@ -746,6 +846,10 @@ void Appearance::setDraw(bool draw)
 void Appearance::setDraw(int primitive,bool draw)
 {
   if(!appearancePtr) return;
+  if(!isStandalone()) {
+    RobotWorld& world=*worlds[this->world]->world;
+    GetManagedGeometry(world,id).SetUniqueAppearance();
+  }
   GLDraw::GeometryAppearance* app = reinterpret_cast<GLDraw::GeometryAppearance*>(appearancePtr);
   switch(primitive) {
   case ALL: app->drawFaces = app->drawVertices = app->drawEdges = draw; break;
@@ -778,6 +882,10 @@ bool Appearance::getDraw(int primitive)
 void Appearance::setColor(float r,float g,float b,float a)
 {
   if(!appearancePtr) return;
+  if(!isStandalone()) {
+    RobotWorld& world=*worlds[this->world]->world;
+    GetManagedGeometry(world,id).SetUniqueAppearance();
+  }
   GLDraw::GeometryAppearance* app = reinterpret_cast<GLDraw::GeometryAppearance*>(appearancePtr);
   app->vertexColor.set(r,g,b,a);
   app->edgeColor.set(r,g,b,a);
@@ -787,6 +895,10 @@ void Appearance::setColor(float r,float g,float b,float a)
 void Appearance::setColor(int primitive,float r,float g,float b,float a)
 {
   if(!appearancePtr) return;
+  if(!isStandalone()) {
+    RobotWorld& world=*worlds[this->world]->world;
+    GetManagedGeometry(world,id).SetUniqueAppearance();
+  }
   GLDraw::GeometryAppearance* app = reinterpret_cast<GLDraw::GeometryAppearance*>(appearancePtr);
   switch(primitive) {
   case ALL:
@@ -825,6 +937,17 @@ void Appearance::setTexture2D(int w,int h,const char* format,const std::vector<u
 void Appearance::setTexcoords(const std::vector<double>& uvs)
 {
   FatalError("Not implemented yet");
+}
+
+void Appearance::setPointSize(float size)
+{
+  if(!appearancePtr) return;
+  if(!isStandalone()) {
+    RobotWorld& world=*worlds[this->world]->world;
+    GetManagedGeometry(world,id).SetUniqueAppearance();
+  }
+  GLDraw::GeometryAppearance* app = reinterpret_cast<GLDraw::GeometryAppearance*>(appearancePtr);
+  app->vertexSize = size;
 }
 
 void Appearance::drawGL()
@@ -911,6 +1034,115 @@ void TriangleMesh::transform(const double R[9],const double t[3])
   }
 }
 
+int PointCloud::numPoints() const { return vertices.size()/3; }
+int PointCloud::numProperties() const { return propertyNames.size(); }
+void PointCloud::setPoints(int num,const vector<double>& plist)
+{
+  vertices.resize(num*3);
+  assert(plist.size() >= num+3);
+  copy(plist.begin(),plist.begin()+num*3,&vertices[0]);
+  properties.resize(num*propertyNames.size());
+  fill(properties.begin(),properties.end(),0.0);
+}
+
+int PointCloud::addPoint(const double p[3])
+{
+  int ofs = (int)vertices.size();
+
+  vertices.push_back(p[0]);
+  vertices.push_back(p[1]);
+  vertices.push_back(p[2]);
+  properties.resize(properties.size()+propertyNames.size(),0.0);
+  return ofs/3;
+}
+
+void PointCloud::setPoint(int index,const double p[3])
+{
+  if(index < 0 || index*3 >= (int)vertices.size())
+    throw PyException("Invalid point index");  
+  vertices[index*3] = p[0];
+  vertices[index*3+1] = p[1];
+  vertices[index*3+2] = p[2];
+}
+
+void PointCloud::getPoint(int index,double out[3]) const
+{
+  if(index < 0 || index*3 >= (int)vertices.size())
+    throw PyException("Invalid point index");  
+  out[0] = vertices[index*3];
+  out[1] = vertices[index*3+1];
+  out[2] = vertices[index*3+2];
+}
+
+void PointCloud::setProperties(const vector<double>& vproperties)
+{
+  int n = numPoints();
+  assert(vproperties.size() >= n*propertyNames.size());
+  copy(vproperties.begin(),vproperties.begin()+propertyNames.size()*n,properties.begin());
+}
+
+void PointCloud::setProperties(int pindex,const vector<double>& vproperties)
+{
+  if(pindex < 0 || pindex >= (int)propertyNames.size())
+    throw PyException("Invalid property index"); 
+  int n = numPoints();
+  assert((int)vproperties.size() >= n);
+  for(int i=0;i<n;i++)
+    properties[i*propertyNames.size()+pindex] = vproperties[i];
+}
+
+void PointCloud::setProperty(int index,int pindex,double value)
+{
+  if(index < 0 || index*3 >= (int)vertices.size())
+    throw PyException("Invalid point index");  
+  if(pindex < 0 || pindex >= (int)propertyNames.size())
+    throw PyException("Invalid property index");  
+  properties[index*propertyNames.size()+pindex] = value;
+}
+
+void PointCloud::setProperty(int index,const std::string& pname,double value)
+{
+  int pindex = -1;
+  for(size_t i=0;i<propertyNames.size();i++)
+    if(propertyNames[i] == pname) {
+      pindex = (int)i;
+      break;
+    }
+  if(pindex < 0)
+    throw PyException("Invalid property name");  
+  setProperty(index,pindex,value);
+}
+
+double PointCloud::getProperty(int index,int pindex) const
+{
+  if(index < 0 || index*3 >= (int)vertices.size())
+    throw PyException("Invalid point index");  
+  if(pindex < 0 || pindex >= (int)propertyNames.size())
+    throw PyException("Invalid property index");  
+  return properties[index*propertyNames.size()+pindex];
+}
+
+double PointCloud::getProperty(int index,const std::string& pname) const
+{
+  int pindex = -1;
+  for(size_t i=0;i<propertyNames.size();i++)
+    if(propertyNames[i] == pname) {
+      pindex = (int)i;
+      break;
+    }
+  if(pindex < 0)
+    throw PyException("Invalid property name");  
+  return getProperty(index,pindex);
+}
+
+void PointCloud::join(const PointCloud& pc)
+{
+  if(propertyNames != pc.propertyNames) 
+    throw PyException("PointCloud::join can't join two PCs with dissimilar property names");
+  vertices.insert(vertices.end(),pc.vertices.begin(),pc.vertices.end());
+  properties.insert(properties.end(),pc.properties.begin(),pc.properties.end());
+}
+
 void PointCloud::translate(const double t[3])
 {
   for(size_t i=0;i<vertices.size();i+=3) {
@@ -950,11 +1182,41 @@ WorldModel::WorldModel(const WorldModel& w)
   refWorld(index);
 }
 
+WorldModel::WorldModel(void* ptrRobotWorld)
+{
+  index = createWorld((RobotWorld*)ptrRobotWorld);
+}
+
+
 const WorldModel& WorldModel::operator = (const WorldModel& w)
 {
+  if(index >= 0) 
+    derefWorld(index);
   index = w.index;
   refWorld(index);
   return *this;
+}
+
+WorldModel WorldModel::copy()
+{
+  WorldModel res;
+  RobotWorld& myworld = *worlds[index]->world;
+  RobotWorld& otherworld = *worlds[res.index]->world;
+  otherworld = myworld;
+  //world occupants -- copy everything but geometry
+  for(size_t i=0;i<otherworld.robots.size();i++) {
+    otherworld.robots[i] = new Robot;
+    *otherworld.robots[i] = *myworld.robots[i];
+  }
+  for(size_t i=0;i<otherworld.terrains.size();i++) {
+    otherworld.terrains[i] = new Terrain;
+    *otherworld.terrains[i] = *myworld.terrains[i];
+  }
+  for(size_t i=0;i<otherworld.rigidObjects.size();i++) {
+    otherworld.rigidObjects[i] = new RigidObject;
+    *otherworld.rigidObjects[i] = *myworld.rigidObjects[i];
+  }
+  return res;
 }
 
 WorldModel::~WorldModel()
@@ -967,7 +1229,7 @@ WorldModel::~WorldModel()
 
 bool WorldModel::readFile(const char* fn)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
 
   const char* ext=FileExtension(fn);
   if(0==strcmp(ext,"rob")) {
@@ -975,17 +1237,26 @@ bool WorldModel::readFile(const char* fn)
       printf("Error loading robot file %s\n",fn);
       return false;
     }
+    if(gEnableCollisionInitialization) {
+      world.robots.back()->InitCollisions();
+      world.robots.back()->UpdateGeometry();
+    }
   }
-  else if(0==strcmp(ext,"env") || 0==strcmp(ext,"tri")) {
+  else if(0==strcmp(ext,"env") || 0==strcmp(ext,"tri") || 0==strcmp(ext,"pcd")) {
     if(world.LoadTerrain(fn)<0) {
       printf("Error loading terrain file %s\n",fn);
       return false;
     }
+    if(gEnableCollisionInitialization) world.terrains.back()->InitCollisions();
   }
   else if(0==strcmp(ext,"obj")) {
     if(world.LoadRigidObject(fn)<0) {
       printf("Error loading rigid object file %s\n",fn);
       return false;
+    }
+    if(gEnableCollisionInitialization) {
+      world.rigidObjects.back()->InitCollisions();
+      world.rigidObjects.back()->UpdateGeometry();
     }
   }
   else if(0==strcmp(ext,"xml")) {
@@ -1015,6 +1286,10 @@ bool WorldModel::readFile(const char* fn)
       printf("Error opening or parsing world file %s\n",fn);
       return false;
     }
+    if(gEnableCollisionInitialization) {
+      world.InitCollisions();
+      world.UpdateGeometry();
+    }
     return true;
   }
   else {
@@ -1026,54 +1301,54 @@ bool WorldModel::readFile(const char* fn)
 
 int WorldModel::numRobots()
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   return world.robots.size();
 }
 
 int WorldModel::numRobotLinks(int robot)
 {
-  RobotWorld& world = worlds[index]->world;
-  return world.robots[robot].robot->links.size();
+  RobotWorld& world = *worlds[index]->world;
+  return world.robots[robot]->links.size();
 }
 
 int WorldModel::numRigidObjects()
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   return world.rigidObjects.size();
 }
 
 int WorldModel::numTerrains()
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   return world.terrains.size();
 }
 
 int WorldModel::numIDs()
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   return world.NumIDs();
 }
 
 RobotModel WorldModel::robot(int robot)
 {
-  if(robot < 0  || robot >= (int)worlds[index]->world.robots.size())
+  if(robot < 0  || robot >= (int)worlds[index]->world->robots.size())
     throw PyException("Invalid robot index");
   RobotModel r;
   r.world = index;
   r.index = robot;
-  r.robot = worlds[index]->world.robots[robot].robot;
+  r.robot = worlds[index]->world->robots[robot];
   return r;
 }
 
 RobotModel WorldModel::robot(const char* robot)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   RobotModel r;
   r.world = index;
   for(size_t i=0;i<world.robots.size();i++)
-    if(world.robots[i].name == robot) {
+    if(world.robots[i]->name == robot) {
       r.index = (int)i;
-      r.robot = world.robots[i].robot;
+      r.robot = world.robots[i];
       return r;
     }
   throw PyException("Invalid robot name");
@@ -1082,12 +1357,12 @@ RobotModel WorldModel::robot(const char* robot)
 
 RobotModelLink WorldModel::robotLink(int robot,int link)
 {
-  if(robot < 0  || robot >= (int)worlds[index]->world.robots.size())
+  if(robot < 0  || robot >= (int)worlds[index]->world->robots.size())
     throw PyException("Invalid robot index");
   RobotModelLink r;
   r.world = index;
   r.robotIndex = robot;
-  r.robotPtr = worlds[index]->world.robots[robot].robot;
+  r.robotPtr = worlds[index]->world->robots[robot];
   r.index = link;
   return r;
 }
@@ -1113,24 +1388,24 @@ RobotModelLink WorldModel::robotLink(const char* robotname,const char* link)
 
 RigidObjectModel WorldModel::rigidObject(int object)
 {
-  if(object < 0  || object >= (int)worlds[index]->world.rigidObjects.size())
+  if(object < 0  || object >= (int)worlds[index]->world->rigidObjects.size())
     throw PyException("Invalid rigid object index");
   RigidObjectModel obj;
   obj.world = index;
   obj.index = object;
-  obj.object = worlds[index]->world.rigidObjects[object].object;
+  obj.object = worlds[index]->world->rigidObjects[object];
   return obj;
 }
 
 RigidObjectModel WorldModel::rigidObject(const char* object)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   RigidObjectModel obj;
   obj.world = index;
   for(size_t i=0;i<world.rigidObjects.size();i++)
-    if(world.rigidObjects[i].name == object) {
+    if(world.rigidObjects[i]->name == object) {
       obj.index = (int)i;
-      obj.object = worlds[index]->world.rigidObjects[i].object;
+      obj.object = world.rigidObjects[i];
       return obj;
     }
   throw PyException("Invalid rigid object name");
@@ -1139,13 +1414,13 @@ RigidObjectModel WorldModel::rigidObject(const char* object)
 
 TerrainModel WorldModel::terrain(int terrain)
 {
-  if(terrain < 0  || terrain >= (int)worlds[index]->world.terrains.size())
+  if(terrain < 0  || terrain >= (int)worlds[index]->world->terrains.size())
     throw PyException("Invalid terrain index");
 
   TerrainModel t;
   t.world = index;
   t.index = terrain;
-  t.terrain = worlds[index]->world.terrains[terrain].terrain;
+  t.terrain = worlds[index]->world->terrains[terrain];
   return t;
 }
 
@@ -1153,11 +1428,11 @@ TerrainModel WorldModel::terrain(const char* terrain)
 {
   TerrainModel t;
   t.world = index;
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   for(size_t i=0;i<world.terrains.size();i++)
-    if(world.terrains[i].name == terrain) {
+    if(world.terrains[i]->name == terrain) {
       t.index = (int)i;
-      t.terrain = worlds[index]->world.terrains[i].terrain;
+      t.terrain = world.terrains[i];
       return t;
     }
   return t;
@@ -1165,83 +1440,147 @@ TerrainModel WorldModel::terrain(const char* terrain)
 
 RobotModel WorldModel::makeRobot(const char* name)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   RobotModel robot;
   robot.world = index;
   robot.index = (int)world.robots.size();
   world.AddRobot(name,new Robot());
-  robot.robot = world.robots.back().robot;
+  robot.robot = world.robots.back();
   return robot;
 }
 
 RigidObjectModel WorldModel::makeRigidObject(const char* name)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   RigidObjectModel object;
   object.world = index;
   object.index = (int)world.rigidObjects.size();
   world.AddRigidObject(name,new RigidObject());
-  object.object = world.rigidObjects.back().object;
+  object.object = world.rigidObjects.back();
   return object;
 }
 
 TerrainModel WorldModel::makeTerrain(const char* name)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   TerrainModel terrain;
   terrain.world = index;
   terrain.index = world.terrains.size();
-  world.AddTerrain(name,new Environment());
-  terrain.terrain = world.terrains.back().terrain;
+  world.AddTerrain(name,new Terrain());
+  terrain.terrain = world.terrains.back();
   return terrain;
 }
 
 RobotModel WorldModel::loadRobot(const char* fn)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   int oindex=world.LoadRobot(fn);
   if(oindex < 0) return RobotModel();
   RobotModel robot;
   robot.world = index;
   robot.index = oindex;
-  robot.robot = world.robots.back().robot;
+  robot.robot = world.robots.back();
+  if(gEnableCollisionInitialization) {
+    world.robots.back()->InitCollisions();
+    world.robots.back()->UpdateGeometry();
+  }
   return robot;
 }
 
 RigidObjectModel WorldModel::loadRigidObject(const char* fn)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   int oindex=world.LoadRigidObject(fn);
   if(oindex < 0) return RigidObjectModel();
   RigidObjectModel obj;
   obj.world = index;
   obj.index = oindex;
-  obj.object = world.rigidObjects.back().object;
+  obj.object = world.rigidObjects.back();
+  if(gEnableCollisionInitialization) {
+    world.rigidObjects.back()->InitCollisions();
+    world.rigidObjects.back()->UpdateGeometry();
+  }
   return obj;
 }
 
 TerrainModel WorldModel::loadTerrain(const char* fn)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   int oindex=world.LoadTerrain(fn);
   if(oindex < 0) return TerrainModel();
   TerrainModel obj;
   obj.world = index;
   obj.index = oindex;
-  obj.terrain = world.terrains.back().terrain;
+  obj.terrain = world.terrains.back();
+  if(gEnableCollisionInitialization) world.terrains.back()->InitCollisions();
   return obj;
 }
 
 int WorldModel::loadElement(const char* fn)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   int id = world.LoadElement(fn);
   return id;
 }
 
+RobotModel WorldModel::add(const char* name,const RobotModel& robot)
+{
+  if(robot.robot == NULL)
+    throw PyException("add(RobotModel): robot refers to NULL object");
+  RobotWorld& world = *worlds[index]->world;
+  world.robots.push_back(new Robot);
+  *world.robots.back() = *robot.robot;
+  return this->robot((int)world.robots.size()-1);
+}
+
+RigidObjectModel WorldModel::add(const char* name,const RigidObjectModel& obj)
+{
+  if(obj.object == NULL)
+    throw PyException("add(RigidObjectModel): obj refers to NULL object");
+  RobotWorld& world = *worlds[index]->world;
+  world.rigidObjects.push_back(new RigidObject);
+  *world.rigidObjects.back() = *obj.object;
+  return this->rigidObject((int)world.rigidObjects.size()-1);
+}
+ 
+TerrainModel WorldModel::add(const char* name,const TerrainModel& terrain)
+{
+  if(terrain.terrain == NULL)
+    throw PyException("add(TerrianModel): terrain refers to NULL object");
+  RobotWorld& world = *worlds[index]->world;
+  world.terrains.push_back(new Terrain);
+  *world.terrains.back() = *terrain.terrain;
+  return this->terrain((int)world.terrains.size()-1);
+}
+
+void WorldModel::remove(const RobotModel& obj)
+{
+  if(obj.world != index) 
+    throw PyException("Robot does not belong to this world");
+  RobotWorld& world = *worlds[index]->world;
+  world.robots.erase(world.robots.begin()+obj.index);
+}
+
+void WorldModel::remove(const RigidObjectModel& obj)
+{
+  if(obj.world != index) 
+    throw PyException("Rigid object does not belong to this world");
+  RobotWorld& world = *worlds[index]->world;
+  world.rigidObjects.erase(world.rigidObjects.begin()+obj.index);
+}
+
+void WorldModel::remove(const TerrainModel& obj)
+{
+  if(obj.world != index) 
+    throw PyException("Rigid object does not belong to this world");
+  RobotWorld& world = *worlds[index]->world;
+  world.terrains.erase(world.terrains.begin()+obj.index);
+}
+
+
 void WorldModel::drawGL()
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   world.DrawGL();
 }
 
@@ -1250,20 +1589,30 @@ void WorldModel::enableGeometryLoading(bool enabled)
   Robot::disableGeometryLoading = !enabled;
 }
 
+void WorldModel::enableInitCollisions(bool enabled)
+{
+  gEnableCollisionInitialization = !enabled;
+  if(enabled) {
+    worlds[index]->world->InitCollisions();
+    worlds[index]->world->UpdateGeometry();
+  }
+}
+
+
 std::string WorldModel::getName(int id)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   return world.GetName(id);
 }
 
 Geometry3D WorldModel::geometry(int id)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   if(world.IsTerrain(id)>=0 || world.IsRigidObject(id)>=0 || world.IsRobotLink(id).first>=0) {
     Geometry3D geom;
     geom.world = index;
     geom.id = id;
-    geom.geomPtr = &world.GetGeometry(id);
+    geom.geomPtr = world.GetGeometry(id);
     return geom;
   }
   Geometry3D geom;
@@ -1274,12 +1623,12 @@ Geometry3D WorldModel::geometry(int id)
 
 Appearance WorldModel::appearance(int id)
 {
-  RobotWorld& world = worlds[index]->world;
+  RobotWorld& world = *worlds[index]->world;
   if(world.IsTerrain(id)>=0 || world.IsRigidObject(id)>=0 || world.IsRobotLink(id).first>=0) {
     Appearance geom;
     geom.world = index;
     geom.id = id;
-    geom.appearancePtr = &world.GetAppearance(id);
+    geom.appearancePtr = world.GetAppearance(id);
     return geom;
   }
   Appearance geom;
@@ -1296,7 +1645,11 @@ RobotModelLink::RobotModelLink()
 
 RobotModel RobotModelLink::getRobot()
 {
-  fprintf(stderr,"RobotModelLink::getRobot() will be deprecated, please use robot() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"RobotModelLink::getRobot() will be deprecated, please use robot() instead\n");
+    warned = true;
+  }
   return robot();
 }
 
@@ -1336,7 +1689,7 @@ void RobotModelLink::setParent(int p)
 
 int RobotModelLink::getID()
 {
-  RobotWorld& world = worlds[this->world]->world;
+  RobotWorld& world = *worlds[this->world]->world;
   return world.RobotLinkID(robotIndex,index);
 }
 
@@ -1345,7 +1698,7 @@ Geometry3D RobotModelLink::geometry()
   Geometry3D res;
   res.world = world;
   res.id = getID();
-  res.geomPtr = &worlds[world]->world.GetGeometry(res.id);
+  res.geomPtr = worlds[world]->world->GetGeometry(res.id);
   return res;
 }
 
@@ -1354,7 +1707,7 @@ Appearance RobotModelLink::appearance()
   Appearance res;
   res.world = world;
   res.id = getID();
-  res.appearancePtr = &worlds[world]->world.GetAppearance(res.id);
+  res.appearancePtr = worlds[world]->world->GetAppearance(res.id);
   return res;
 }
 
@@ -1434,7 +1787,7 @@ void RobotModelLink::setTransform(const double R[9],const double t[3])
   RobotLink3D& link=robotPtr->links[index];
   link.T_World.R.set(R);
   link.T_World.t.set(t);
-  robotPtr->geometry[index].SetTransform(link.T_World);
+  robotPtr->geometry[index]->SetTransform(link.T_World);
 }
 
 void RobotModelLink::getParentTransform(double R[9],double t[3])
@@ -1514,12 +1867,12 @@ void RobotModelLink::getPointVelocity(const double plocal[3],double out[3])
 
 void RobotModelLink::drawLocalGL(bool keepAppearance)
 {
-  RobotWorld& world = worlds[this->world]->world;
+  RobotWorld& world = *worlds[this->world]->world;
   if(keepAppearance) {
-    world.robots[robotIndex].view.DrawLink_Local(index);
+    world.robotViews[robotIndex].DrawLink_Local(index);
   }
   else
-    world.robots[robotIndex].robot->DrawLinkGL(index);
+    world.robots[robotIndex]->DrawLinkGL(index);
 }
 
 void RobotModelLink::drawWorldGL(bool keepAppearance)
@@ -1537,7 +1890,11 @@ RobotModelDriver::RobotModelDriver()
 
 RobotModel RobotModelDriver::getRobot()
 {
-  fprintf(stderr,"RobotModelDriver::getRobot() will be deprecated, please use robot() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"RobotModelDriver::getRobot() will be deprecated, please use robot() instead\n");
+    warned = true;
+  }
   return robot();
 }
 
@@ -1620,13 +1977,13 @@ RobotModel::RobotModel()
 
 const char* RobotModel::getName()
 {
-  RobotWorld& world = worlds[this->world]->world;
-  return world.robots[index].name.c_str();
+  RobotWorld& world = *worlds[this->world]->world;
+  return world.robots[index]->name.c_str();
 }
 
 int RobotModel::getID()
 {
-  RobotWorld& world = worlds[this->world]->world;
+  RobotWorld& world = *worlds[this->world]->world;
   return world.RobotID(index);
 }
 
@@ -1637,7 +1994,11 @@ int RobotModel::numLinks()
 
 RobotModelLink RobotModel::getLink(int linkindex)
 {
-  fprintf(stderr,"RobotModel::getLink() will be deprecated, please use link() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"RobotModel::getLink() will be deprecated, please use link() instead\n");
+    warned = true;
+  }
   return link(linkindex);
 }
 
@@ -1653,14 +2014,19 @@ RobotModelLink RobotModel::link(int linkindex)
 
 RobotModelLink RobotModel::getLink(const char* name)
 {
-  fprintf(stderr,"RobotModel::getLink() will be deprecated, please use link() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"RobotModel::getLink() will be deprecated, please use link() instead\n");
+    warned = true;
+  }
   return link(name);
 }
 
 RobotModelLink RobotModel::link(const char* name)
 {
+  string sname(name);
   for(size_t i=0;i<robot->linkNames.size();i++)
-    if(string(name) == robot->linkNames[i]) {
+    if(sname == robot->linkNames[i]) {
       return link((int)i);
     }
   RobotModelLink link;
@@ -1680,7 +2046,11 @@ int RobotModel::numDrivers()
 
 RobotModelDriver RobotModel::getDriver(int driverindex)
 {
-  fprintf(stderr,"RobotModel::getDriver() will be deprecated, please use driver() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"RobotModel::getDriver() will be deprecated, please use driver() instead\n");
+    warned = true;
+  }
   return driver(driverindex);
 }
 
@@ -1696,14 +2066,19 @@ RobotModelDriver RobotModel::driver(int driverindex)
 
 RobotModelDriver RobotModel::getDriver(const char* name)
 {
-  fprintf(stderr,"RobotModel::getDriver() will be deprecated, please use driver() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"RobotModel::getDriver() will be deprecated, please use driver() instead\n");
+    warned = true;
+  }
   return driver(name);
 }
 
 RobotModelDriver RobotModel::driver(const char* name)
 {
+  string sname(name);
   for(size_t i=0;i<robot->driverNames.size();i++)
-    if(name == robot->driverNames[i]) {
+    if(sname == robot->driverNames[i]) {
       return getDriver((int)i);
     }
   RobotModelDriver link;
@@ -1786,6 +2161,41 @@ void RobotModel::setTorqueLimits(const vector<double>& tmax)
   robot->torqueMax.copy(&tmax[0]);
 }
 
+void RobotModel::setDOFPosition(int i,double qi)
+{
+  robot->q(i) = qi;
+  robot->UpdateFrames();
+}
+
+void RobotModel::setDOFPosition(const char* name,double qi)
+{
+  string sname(name);
+  for(size_t i=0;i<robot->linkNames.size();i++)
+    if(sname == robot->linkNames[i]) {
+      robot->q(i) = qi;
+      robot->UpdateFrames();
+      return;
+    }
+  throw PyException("Invalid link name");
+}
+
+double RobotModel::getDOFPosition(int i)
+{
+  return robot->q(i);
+}
+
+double RobotModel::getDOFPosition(const char* name)
+{
+  string sname(name);
+  for(size_t i=0;i<robot->linkNames.size();i++)
+    if(sname == robot->linkNames[i]) {
+      return robot->q(i);
+    }
+  throw PyException("Invalid link name");
+  return 0;
+}
+
+
 void RobotModel::interpolate(const std::vector<double>& a,const std::vector<double>& b,double u,std::vector<double>& out)
 {
   Vector va(a),vb(b),vout;
@@ -1838,13 +2248,13 @@ bool RobotModel::selfCollides()
 
 void RobotModel::drawGL(bool keepAppearance)
 {
-  RobotWorld& world = worlds[this->world]->world;
+  RobotWorld& world = *worlds[this->world]->world;
   if(keepAppearance) {
-    world.robots[index].view.Draw();
+    world.robotViews[index].Draw();
   }
   else {
     for(size_t i=0;i<robot->links.size();i++)
-      world.robots[index].view.DrawLink_World(i,false);
+      world.robotViews[index].DrawLink_World(i,false);
   }
 }
 
@@ -1944,13 +2354,13 @@ RigidObjectModel::RigidObjectModel()
 
 const char* RigidObjectModel::getName()
 {
-  RobotWorld& world = worlds[this->world]->world;
-  return world.rigidObjects[index].name.c_str();
+  RobotWorld& world = *worlds[this->world]->world;
+  return world.rigidObjects[index]->name.c_str();
 }
 
 int RigidObjectModel::getID()
 {
-  RobotWorld& world = worlds[this->world]->world;
+  RobotWorld& world = *worlds[this->world]->world;
   return world.RigidObjectID(index);
 }
 
@@ -1959,7 +2369,7 @@ Geometry3D RigidObjectModel::geometry()
   Geometry3D res;
   res.world = world;
   res.id = getID();
-  res.geomPtr = &worlds[world]->world.GetGeometry(res.id);
+  res.geomPtr = worlds[world]->world->GetGeometry(res.id);
   return res;
 }
 
@@ -1968,7 +2378,7 @@ Appearance RigidObjectModel::appearance()
   Appearance res;
   res.world = world;
   res.id = getID();
-  res.appearancePtr = &worlds[world]->world.GetAppearance(res.id);
+  res.appearancePtr = worlds[world]->world->GetAppearance(res.id);
   return res;
 }
 
@@ -2038,20 +2448,20 @@ void RigidObjectModel::setTransform(const double R[9],const double t[3])
   RigidObject* obj=object;
   obj->T.R.set(R);
   obj->T.t.set(t);
-  obj->geometry.SetTransform(obj->T);
+  obj->geometry->SetTransform(obj->T);
 }
 
 void RigidObjectModel::drawGL(bool keepAppearance)
 {
-  RobotWorld& world = worlds[this->world]->world;
+  RobotWorld& world = *worlds[this->world]->world;
   if(keepAppearance) {
-    world.rigidObjects[index].view.Draw();
+    world.rigidObjects[index]->DrawGL();
   }
   else {
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     GLDraw::glMultMatrix(Matrix4(object->T));
-    GLDraw::draw(object->geometry);
+    GLDraw::draw(*object->geometry);
     glPopMatrix();
   }
 }
@@ -2064,13 +2474,13 @@ TerrainModel::TerrainModel()
 
 const char* TerrainModel::getName()
 {
-  RobotWorld& world = worlds[this->world]->world;
-  return world.terrains[index].name.c_str();
+  RobotWorld& world = *worlds[this->world]->world;
+  return world.terrains[index]->name.c_str();
 }
 
 int TerrainModel::getID()
 {
-  RobotWorld& world = worlds[this->world]->world;
+  RobotWorld& world = *worlds[this->world]->world;
   return world.TerrainID(index);
 }
 
@@ -2079,7 +2489,7 @@ Geometry3D TerrainModel::geometry()
   Geometry3D res;
   res.world = world;
   res.id = getID();
-  res.geomPtr = &worlds[world]->world.GetGeometry(res.id);
+  res.geomPtr = worlds[world]->world->GetGeometry(res.id);
   return res;
 }
 
@@ -2089,7 +2499,7 @@ Appearance TerrainModel::appearance()
   Appearance res;
   res.world = world;
   res.id = getID();
-  res.appearancePtr = &worlds[world]->world.GetAppearance(res.id);
+  res.appearancePtr = worlds[world]->world->GetAppearance(res.id);
   return res;
 }
 
@@ -2100,12 +2510,12 @@ void TerrainModel::setFriction(double friction)
 
 void TerrainModel::drawGL(bool keepAppearance)
 {
-  RobotWorld& world = worlds[this->world]->world;
+  RobotWorld& world = *worlds[this->world]->world;
   if(keepAppearance) {
-    world.terrains[index].view.Draw();
+    world.terrains[index]->DrawGL();
   }
   else {
-    GLDraw::draw(terrain->geometry);
+    GLDraw::draw(*terrain->geometry);
   }
 }
 
@@ -2133,13 +2543,13 @@ Simulator::Simulator(const WorldModel& model,const char* settings)
 
   //initialize simulation
   printf("Initializing simulation...\n");
-  RobotWorld& rworld=worlds[model.index]->world;
+  RobotWorld& rworld=*worlds[model.index]->world;
   sim->Init(&rworld);
 
   //setup controllers
   sim->robotControllers.resize(rworld.robots.size());
   for(size_t i=0;i<sim->robotControllers.size();i++) {
-    Robot* robot=rworld.robots[i].robot;
+    Robot* robot=rworld.robots[i];
     sim->SetController(i,MakeController(robot));
 
     MakeSensors(robot,sim->controlSimulators[i].sensors);
@@ -2172,7 +2582,11 @@ Simulator::~Simulator()
 
 WorldModel Simulator::getWorld() const
 {
-  fprintf(stderr,"Simulator::getWorld() will be deprecated, please use world instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"Simulator::getWorld() will be deprecated, please use world instead\n");
+    warned = true;
+  }
   return world;
 }
 
@@ -2315,7 +2729,7 @@ void Simulator::enableContactFeedback(int obj1,int obj2)
 void Simulator::enableContactFeedbackAll()
 {
   //setup feedback
-  RobotWorld& rworld=worlds[world.index]->world;
+  RobotWorld& rworld=*worlds[world.index]->world;
   //world-object
   const ODESimulatorSettings& settings = sim->odesim.GetSettings();
   if(settings.rigidObjectCollisions) {
@@ -2336,7 +2750,7 @@ void Simulator::enableContactFeedbackAll()
   }
   //////////////
   for(size_t r=0;r<rworld.robots.size();r++) {
-    for(size_t j=0;j<rworld.robots[r].robot->links.size();j++) {
+    for(size_t j=0;j<rworld.robots[r]->links.size();j++) {
       int linkid = rworld.RobotLinkID(r,j);
       //robot-object
       for(size_t i=0;i<rworld.rigidObjects.size();i++) {
@@ -2348,8 +2762,8 @@ void Simulator::enableContactFeedbackAll()
       }
       //robot-self
       if(settings.robotSelfCollisions) {
-    for(size_t k=0;k<rworld.robots[r].robot->links.size();k++) {
-      if(rworld.robots[r].robot->selfCollisions(j,k)) {
+    for(size_t k=0;k<rworld.robots[r]->links.size();k++) {
+      if(rworld.robots[r]->selfCollisions(j,k)) {
         sim->EnableContactFeedback(rworld.RobotLinkID(r,k),linkid);
       }
     }
@@ -2358,7 +2772,7 @@ void Simulator::enableContactFeedbackAll()
       if(settings.robotRobotCollisions) {
     for(size_t i=0;i<rworld.robots.size();i++) {
       if(i==r) continue;
-      for(size_t k=0;k<rworld.robots[i].robot->links.size();k++) {
+      for(size_t k=0;k<rworld.robots[i]->links.size();k++) {
         sim->EnableContactFeedback(rworld.RobotLinkID(i,k),linkid);
       }
     }
@@ -2379,7 +2793,11 @@ void Simulator::setSimStep(double dt)
 
 SimRobotController Simulator::getController(int robot)
 {
-  fprintf(stderr,"Simulator::getController() will be deprecated, please use controller() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"Simulator::getController() will be deprecated, please use controller() instead\n");
+    warned = true;
+  }
   return controller(robot);
 }
 
@@ -2395,7 +2813,11 @@ SimRobotController Simulator::controller(int robot)
 
 SimRobotController Simulator::getController(const RobotModel& robot)
 {
-  fprintf(stderr,"Simulator::getController() will be deprecated, please use controller() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"Simulator::getController() will be deprecated, please use controller() instead\n");
+    warned = true;
+  }
   return controller(robot);
 }
 
@@ -2417,6 +2839,18 @@ bool SimBody::isEnabled()
 {
   return dBodyIsEnabled(body) != 0;
 }
+
+void SimBody::enableDynamics(bool enabled)
+{
+  if(!enabled) dBodySetKinematic(body);
+  else dBodySetDynamic(body);
+}
+
+bool SimBody::isDynamicsEnabled()
+{
+  return dBodyIsKinematic(body) == 0;
+}
+
 
 void SimBody::applyWrench(const double f[3],const double t[3])
 {
@@ -2522,19 +2956,31 @@ void SimBody::setSurface(const ContactParameters& res)
 
 SimBody Simulator::getBody(const RobotModelLink& link)
 {
-  fprintf(stderr,"Simulator::getBody() will be deprecated, please use body() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"Simulator::getBody() will be deprecated, please use body() instead\n");
+    warned = true;
+  }
   return body(link);
 }
 
 SimBody Simulator::getBody(const RigidObjectModel& object)
 {
-  fprintf(stderr,"Simulator::getBody() will be deprecated, please use body() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"Simulator::getBody() will be deprecated, please use body() instead\n");
+    warned = true;
+  }
   return body(object);
 }
 
 SimBody Simulator::getBody(const TerrainModel& terrain)
 {
-  fprintf(stderr,"Simulator::getBody() will be deprecated, please use body() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"Simulator::getBody() will be deprecated, please use body() instead\n");
+    warned = true;
+  }
   return body(terrain);
 }
 
@@ -2558,7 +3004,7 @@ SimBody Simulator::body(const TerrainModel& terrain)
 {
   SimBody b;
   b.body = NULL;
-  b.geometry = sim->odesim.envGeom(terrain.index);
+  b.geometry = sim->odesim.terrainGeom(terrain.index);
   return b;
 }
 
@@ -2673,13 +3119,21 @@ void SimRobotSensor::getMeasurements(std::vector<double>& out)
 
 SimRobotSensor SimRobotController::getSensor(int sensorIndex)
 {
-  fprintf(stderr,"SimRobotController::getSensor() will be deprecated, please use sensor() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"SimRobotController::getSensor() will be deprecated, please use sensor() instead\n");
+    warned = true;
+  }
   return sensor(sensorIndex);
 }
 
 SimRobotSensor SimRobotController::getNamedSensor(const std::string& name)
 {
-  fprintf(stderr,"SimRobotController::getNamedSensor() will be deprecated, please use sensor() instead\n");
+  static bool warned = false;
+  if(!warned) {
+    fprintf(stderr,"SimRobotController::getNamedSensor() will be deprecated, please use sensor() instead\n");
+    warned = true;
+  }
   return sensor(name.c_str());
 }
 SimRobotSensor SimRobotController::sensor(int sensorIndex)
@@ -2893,7 +3347,7 @@ void SimRobotController::setPIDCommand(const std::vector<double>& qdes,const std
 {
   setPIDCommand(qdes,dqdes);
   RobotMotorCommand& command = sim->controlSimulators[index].command;
-  Robot* robot=sim->controlSimulators[index].robot;
+  //Robot* robot=sim->controlSimulators[index];
   if(tfeedforward.size() != command.actuators.size())
      throw PyException("Invalid command sizes");
   for(size_t i=0;i<command.actuators.size();i++) {
@@ -3016,8 +3470,9 @@ Camera::Viewport GetCameraViewport(const Viewport& viewport)
 
 bool Widget::hover(int x,int y,const Viewport& viewport)
 {
-  double distance;
+  double distance = Inf;
   Camera::Viewport vp = GetCameraViewport(viewport);
+  Assert(widgets[index].widget != NULL);
   bool res=widgets[index].widget->Hover(x,y,vp,distance);
   if(res) widgets[index].widget->SetHighlight(true);
   else widgets[index].widget->SetHighlight(false);
@@ -3026,7 +3481,7 @@ bool Widget::hover(int x,int y,const Viewport& viewport)
 
 bool Widget::beginDrag(int x,int y,const Viewport& viewport)
 {
-  double distance;
+  double distance = Inf;
   Camera::Viewport vp = GetCameraViewport(viewport);
   bool res=widgets[index].widget->BeginDrag(x,y,vp,distance);
   if(res) widgets[index].widget->SetFocus(true);
@@ -3068,6 +3523,16 @@ bool Widget::wantsRedraw()
   return widgets[index].widget->requestRedraw;
 }
 
+bool Widget::hasHighlight()
+{
+  return widgets[index].widget->hasHighlight;
+}
+
+bool Widget::hasFocus()
+{
+  return widgets[index].widget->hasFocus;
+}
+
 WidgetSet::WidgetSet()
   :Widget()
 {
@@ -3089,7 +3554,13 @@ void WidgetSet::remove(const Widget& subwidget)
       //delete it
       ws->widgets.erase(ws->widgets.begin()+i);
       ws->widgetEnabled.erase(ws->widgetEnabled.begin()+i);
+      if(ws->activeWidget == widgets[subwidget.index].widget)
+	ws->activeWidget = NULL;
+      if(ws->closestWidget == widgets[subwidget.index].widget)
+	ws->closestWidget = NULL;
       derefWidget(subwidget.index);
+      if(widgets[subwidget.index].widget == NULL) 
+	return;
       i--;
     }
 }
@@ -3099,6 +3570,10 @@ void WidgetSet::enable(const Widget& subwidget,bool enabled)
   GLDraw::WidgetSet* ws=dynamic_cast<GLDraw::WidgetSet*>(&*widgets[index].widget);
   for(size_t i=0;i<ws->widgets.size();i++)
     if(ws->widgets[i] == widgets[subwidget.index].widget) {
+      if(ws->activeWidget == widgets[subwidget.index].widget)
+	ws->activeWidget = NULL;
+      if(ws->closestWidget == widgets[subwidget.index].widget)
+	ws->closestWidget = NULL;
       ws->widgetEnabled[i] = enabled;
     }
 }
@@ -3166,10 +3641,9 @@ void TransformPoser::enableRotation(bool enable)
 ObjectPoser::ObjectPoser(RigidObjectModel& object)
   :Widget()
 {
-  RobotWorld& world = worlds[object.world]->world;
-  RigidObject* obj = world.rigidObjects[object.index].object;
-  ViewRigidObject* view = &world.rigidObjects[object.index].view;
-  widgets[index].widget = new RigidObjectPoseWidget(obj,view);
+  RobotWorld& world = *worlds[object.world]->world;
+  RigidObject* obj = world.rigidObjects[object.index];
+  widgets[index].widget = new RigidObjectPoseWidget(obj);
 }
 
 void ObjectPoser::set(const double R[9],const double t[3])
@@ -3191,9 +3665,13 @@ void ObjectPoser::get(double out[9],double out2[3])
 
 RobotPoser::RobotPoser(RobotModel& robot)
 {
-  RobotWorld& world = worlds[robot.world]->world;
-  Robot* rob = world.robots[robot.index].robot;
-  ViewRobot* view = &world.robots[robot.index].view;
+  Assert(worlds[robot.world]->world != NULL);
+  RobotWorld& world = *worlds[robot.world]->world;
+  Assert(robot.index >= 0 && robot.index < world.robots.size());
+  Robot* rob = world.robots[robot.index];
+  ViewRobot* view = &world.robotViews[robot.index];
+  Assert(rob != NULL);
+  Assert(view != NULL);
   widgets[index].widget = new RobotPoseWidget(rob,view);
 }
 

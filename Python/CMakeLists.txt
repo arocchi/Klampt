@@ -16,6 +16,7 @@ IF(PYTHON)
   SET(OUTPUT CMakeFiles)
   add_custom_command(
     OUTPUT ${OUTPUT}/python_timestamp
+    COMMAND rm -rf build/
     COMMAND ${PYTHON} setup.py build_ext
     COMMAND ${CMAKE_COMMAND} -E touch ${TEMPOUTPUT}/python_timestamp
     DEPENDS ${DEPS}
@@ -34,6 +35,5 @@ IF(PYTHON)
   )
   add_custom_target(python ALL DEPENDS ${OUTPUT}/python_timestamp)
   add_custom_target(python-docs DEPENDS ${OUTPUT}/python_docs_timestamp)
-  install(CODE "execute_process(COMMAND ${PYTHON} setup.py install)")
   add_custom_target(python-install DEPENDS ${OUTPUT}/python_install_timestamp)
 ENDIF(PYTHON)

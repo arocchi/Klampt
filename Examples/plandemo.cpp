@@ -2,7 +2,7 @@
 #include "Planning/RobotCSpace.h"
   //defines WorldPlannerSettings and SingleRobotCSpace
   //includes definitions for RobotWorld, Config
-#include <planning/AnyMotionPlanner.h>
+#include <KrisLibrary/planning/AnyMotionPlanner.h>
   //defines MotionPlannerFactory
   //includes MilestonePath, HaltingCondition
 
@@ -11,11 +11,11 @@
   //defines XmlWorld for loading RobotWorlds from .xml files
 #include "Modeling/Paths.h"
 #include "Modeling/MultiPath.h"
-  //defines paths and conversion routines
-#include <utils/ioutils.h>
-#include <utils/stringutils.h>
+  //defines file paths and conversion routines
+#include <KrisLibrary/utils/ioutils.h>
+#include <KrisLibrary/utils/stringutils.h>
   //for easy timing 
-#include <Timer.h>
+#include <KrisLibrary/Timer.h>
 #include <string.h>
 #include <time.h>
 #include <fstream>
@@ -32,6 +32,12 @@
 bool SimplePlan(RobotWorld& world,int robot,const Config& qstart,const Config& qgoal,MilestonePath& path,
 		const HaltingCondition& cond,const string& plannerSettings="")
 {
+  ///If you don't call this, everything will run fine due to on-demand
+  ///collision initialization, but at least here you get some debug information
+  ///if your world is really complex and the collision detection structures
+  ///take a long time to initialize.
+  world.InitCollisions();
+
   //1. Create and initialize a WorldPlannerSettings object for the given
   //world. 
   WorldPlannerSettings settings;
@@ -45,8 +51,8 @@ bool SimplePlan(RobotWorld& world,int robot,const Config& qstart,const Config& q
   //adding margins onto the geometries in the world. For example, to avoid
   //collisions by 0.05 units, you can use the following code:
   //  Real margin = 0.05
-  //  for(size_t i=0;i<world.robots[robot].robot->geometry.size();i++)
-  //    world.robots[robot].robot->geometry[i].margin += margin;
+  //  for(size_t i=0;i<world.robots[robot]->geometry.size();i++)
+  //    world.robots[robot]->geometry[i].margin += margin;
   //(make sure to restore the old margins if you want to perform multiple
   // planning runs)
 
@@ -212,7 +218,7 @@ int main(int argc,const char** argv)
     cmdline += argv[i];
   }
   MultiPath path;
-  path.settings["robot"] = world.robots[robot].name;
+  path.settings["robot"] = world.robots[robot]->name;
   path.settings["command"] = cmdline;
   //begin planning
   bool feasible = true;

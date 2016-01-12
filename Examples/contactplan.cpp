@@ -1,12 +1,12 @@
 #include "Planning/StanceCSpace.h"
-#include <planning/AnyMotionPlanner.h>
-#include <utils/ioutils.h>
-#include <utils/stringutils.h>
+#include <KrisLibrary/planning/AnyMotionPlanner.h>
+#include <KrisLibrary/utils/ioutils.h>
+#include <KrisLibrary/utils/stringutils.h>
 #include "Modeling/Paths.h"
 #include "Modeling/MultiPath.h"
 #include "IO/XmlWorld.h"
 #include <time.h>
-#include <Timer.h>
+#include <KrisLibrary/Timer.h>
 #include <string.h>
 #include <fstream>
 
@@ -304,11 +304,11 @@ int main(int argc,const char** argv)
     cmdline += argv[i];
   }
   MultiPath path;
-  path.settings["robot"] = world.robots[robot].name;
+  path.settings["robot"] = world.robots[robot]->name;
   path.settings["command"] = cmdline;
   //begin planning
   bool feasible = true;
-  Config qstart = world.robots[robot].robot->q;
+  Config qstart = world.robots[robot]->q;
   for(size_t i=0;i+1<configs.size();i++) {
     MilestonePath mpath;
     bool res = false;

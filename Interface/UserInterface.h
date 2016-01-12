@@ -3,13 +3,13 @@
 
 #include "Modeling/World.h"
 #include "Modeling/DynamicPath.h"
-#include <camera/viewport.h>
+#include <KrisLibrary/camera/viewport.h>
 #include "Planning/RobotCSpace.h"
 #include "Planning/PlannerSettings.h"
 #include "Planning/RealTimePlanner.h"
 #include "RobotInterface.h"
 #include "InputProcessor.h"
-#include <utils/threadutils.h>
+#include <KrisLibrary/utils/threadutils.h>
 
 
 
@@ -23,7 +23,7 @@ class RobotUserInterface
  public:
   RobotUserInterface();
   virtual ~RobotUserInterface() { }
-  Robot* GetRobot() const { return world->robots[0].robot; }
+  Robot* GetRobot() const { return world->robots[0]; }
   void GetClickRay(int mx,int my,Ray3D& ray) const;
 
   //Subclasses overload these functions

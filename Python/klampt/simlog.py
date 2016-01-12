@@ -2,6 +2,7 @@ from klampt import vectorops,so3,se3
 
 
 class SimLogger:
+    """A CSV logger for a simulation. """
     def __init__(self,sim,state_fn,contact_fn=None,colliding='all',saveheader=True):
         """
         Logs a simulation to a CSV file.
@@ -59,17 +60,15 @@ class SimLogger:
                 elements.append(n+'_dq['+world.robot(i).link(j).getName()+']')
             for j in xrange(world.robot(i).numDrivers()):
                 elements.append(n+'_t['+str(i)+']')
-            """
             j = 0
             while True:
-                s = self.sim.controller(i).getSensor(j)
+                s = self.sim.controller(i).sensor(j)
                 if len(s.name())==0:
                     break
                 names = s.measurementNames()
                 for sn in range(len(names)):
                     elements.append(n+'_'+s.name()+'['+names[sn]+']')
                 j += 1
-            """
         for i in xrange(world.numRigidObjects()):
             n = world.rigidObject(i).getName()
             elements += [n+'_'+suffix for suffix in ['comx','comy','comz','x','y','z','rx','ry','rz','dx','dy','dz','wx','wy','wz']]
@@ -101,7 +100,6 @@ class SimLogger:
             values += robot.getConfig()
             values += robot.getVelocity()
             values += sim.getActualTorques(i)
-            """
             j = 0
             while True:
                 s = self.sim.controller(i).getSensor(j)
@@ -110,7 +108,6 @@ class SimLogger:
                 meas = s.measurements()
                 values += meas
                 j += 1
-            """
         for i in xrange(world.numRigidObjects()):
             obj = world.rigidObject(i)
             T = obj.getTransform()

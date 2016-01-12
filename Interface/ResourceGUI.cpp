@@ -1,7 +1,7 @@
 #include "ResourceGUI.h"
 #include "IO/XmlWorld.h"
-#include "utils/stringutils.h"
-#include "utils/ioutils.h"
+#include <KrisLibrary/utils/stringutils.h>
+#include <KrisLibrary/utils/ioutils.h>
 
 ResourceGUIBackend::ResourceGUIBackend(RobotWorld* world,ResourceManager* library)
   :WorldGUIBackend(world),resources(library)
@@ -292,7 +292,7 @@ void ResourceGUIBackend::RenderCurResource()
     viewResource.DrawGL(current);
   */
   //separate open?
-  viewResource.SetRobot(world->robots[0].robot);
+  viewResource.SetRobot(world->robots[0]);
   if(resources && resources->selected)
     viewResource.DrawGL(resources->selected->resource);
 }

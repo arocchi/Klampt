@@ -1,7 +1,7 @@
 #include "RandomizedSelfCollisions.h"
-#include <math/random.h>
-#include <utils/ProgressPrinter.h>
-#include <utils/SmartPointer.h>
+#include <KrisLibrary/math/random.h>
+#include <KrisLibrary/utils/ProgressPrinter.h>
+#include <KrisLibrary/utils/SmartPointer.h>
 #include "Planning/DistanceQuery.h"
 
 void SampleRobot(RobotWithGeometry& robot)
@@ -143,9 +143,10 @@ void RandomizedSelfCollisionDistances(RobotWithGeometry& robot,Array2D<Real>& mi
   maxDistance.resize(robot.q.n,robot.q.n,-Inf);
   Array2D<SmartPointer<RobotWithGeometry::CollisionQuery> > queries(robot.q.n,robot.q.n);
   for(int i=0;i<robot.q.n;i++) {
+    if(robot.IsGeometryEmpty(i)) continue;
     for(int j=i+1;j<robot.q.n;j++) {
-      if(!robot.geometry[i].Empty() && robot.geometry[j].Empty())
-	queries(i,j) = new RobotWithGeometry::CollisionQuery(robot.geometry[i],robot.geometry[j]);
+      if(!robot.IsGeometryEmpty(j))
+	queries(i,j) = new RobotWithGeometry::CollisionQuery(*robot.geometry[i],*robot.geometry[j]);
     }
   }
 

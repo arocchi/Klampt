@@ -163,6 +163,12 @@ class SimBody
   /// Returns true if this body is being simulated
   bool isEnabled();
 
+  /// Sets the dynamic simulation of the body on/off.  If false, velocities
+  /// will simply be integrated forward, and forces will not affect velocity
+  /// i.e., it will be pure kinematic simulation.
+  void enableDynamics(bool enabled=true);
+  bool isDynamicsEnabled();
+
   /// Applies a force and torque about the COM at the current simulation
   /// time step.
   void applyWrench(const double f[3],const double t[3]);
@@ -188,8 +194,9 @@ class SimBody
   void setCollisionPadding(double padding);
   double getCollisionPadding();
 
-  /// Gets/sets the surface properties
+  /// Gets (a copy of) the surface properties
   ContactParameters getSurface();
+  /// Sets the surface properties
   void setSurface(const ContactParameters& params);
 
   ODEGeometry* geometry;
@@ -272,8 +279,11 @@ class Simulator
   /// Returns a controller for the indicated robot
   SimRobotController controller(int robot);
   SimRobotController controller(const RobotModel& robot);
+  ///Returns the SimBody corresponding to the given link
   SimBody body(const RobotModelLink& link);
+  ///Returns the SimBody corresponding to the given object
   SimBody body(const RigidObjectModel& object);
+  ///Returns the SimBody corresponding to the given terrain
   SimBody body(const TerrainModel& terrain);
   ///Old-style: will be deprecated
   SimRobotController getController(int robot);
