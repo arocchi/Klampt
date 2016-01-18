@@ -296,6 +296,7 @@ class HandSimGLViewer(GLRealtimeProgram):
 
         self.shaking = False
         self.num_shakes = 4 # 4 shakes, one every 0.5 secs, for 1.2 secs total
+        self.first_shake_interval = 1.0
         self.shaking_interval = 0.3
         self.next_shake = None
         self.remaining_shakes = None
@@ -503,6 +504,7 @@ class HandSimGLViewer(GLRealtimeProgram):
                 if AUTOMATIC_MODE:
                     print "Object grasped:", self.checkObjectIsGrasped()
                     self.stats["Object grasped and lifted"] = self.checkObjectIsGrasped()
+                    self.stats["t_lifted"] = self.ttotal
                     self.saveExperimentStatistics()
                     self.shaking = True
                     print "Stats:",self.stats
@@ -515,9 +517,14 @@ class HandSimGLViewer(GLRealtimeProgram):
 
             if self.remaining_shakes > 0:
                 if self.next_shake is None:
-                    self.next_shake = self.ttotal + self.shaking_interval
+                    if self.remaining_shakes == self.num_shakes:
+                        self.next_shake = self.ttotal + self.first_shake_interval
+                    else:
+                        self.next_shake = self.ttotal + self.shaking_interval
 
                 if self.next_shake <= self.ttotal:
+                    if self.remaining_shakes == self.num_shakes:
+                        self.stats["t_first_shake"] = self.ttotal
                     self.next_shake = None
                     self.shakeObj()
                     self.remaining_shakes -= 1
