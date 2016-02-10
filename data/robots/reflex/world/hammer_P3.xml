@@ -11,7 +11,7 @@
 -->
   <terrain name="floor" file="../../../terrains/plane.env"/>
   
-  <!-- preshape for P1 is 1.3rad, wich translates to 0.52 (robot to sim is *1.5/2.5) -->
+  <!-- preshape for P3 is 0.5rad, wich translates to 0.31 (??) (robot to sim is *1.5/2.5) -->
   <robot name="RobotiQ 3-Finger Adaptive Gripper" file="../reflex_col_with_moving_base.rob" 
          position="0.30 0 0.198" rotateRPY="3.14 0 3.14"/>
 
