@@ -1,0 +1,7 @@
+                          BLEM      OPCODE
+hammer_P2:             0.00274     0.00294
+heinz_P2:              0.00275     0.00373
+spray_P1 (adaptive):   0.00323     0.00233
+spray_P4:              0.00229     0.00293
+
+In short, for BLEM we have ~2.7ms, OPCODE ~2.9
