@@ -7,7 +7,8 @@ import random
 import numpy.random
 import numpy.linalg
 from simlog import *
-import os.path  
+import os.path
+from time import time
 
 has_moving_base = True
 
@@ -267,6 +268,8 @@ class HandSimGLViewer(GLRealtimeProgram):
         GLRealtimeProgram.__init__(self,"Reflex simulation program")
         self.handsim = handsim
         self.sim = handsim.sim
+        self.log_t = None
+        self.log_substep = None
 
         if world_name == None:
             self.logger = SimLogger(handsim.sim,"log_reflex_state.csv","log_reflex_contact.csv",saveheader=False)
@@ -335,6 +338,32 @@ class HandSimGLViewer(GLRealtimeProgram):
 
         #press 'c' to toggle display contact points / forces
         self.drawContacts = False
+
+        self.t_sim = 0
+        self.t_wall = time()
+
+        if self.world_name is not None:
+            fn = None
+
+            if DISABLE_BLEM:
+                fn = self.world_name.split(".")[0] + '_opcode' + '_t.csv'
+            else:
+                fn = self.world_name.split(".")[0] + '_t.csv'
+            self.log_t = file(fn, "w")
+
+            if DISABLE_BLEM:
+                fn = self.world_name.split(".")[0] + '_opcode' + '_t_substeps.csv'
+            else:
+                fn = self.world_name.split(".")[0] + '_t_substeps.csv'
+            self.log_substep = file(fn, "w")
+
+            self.log_t.write("#control_dt=" + str(self.control_dt) +
+                             ", dt=" + str(self.dt) +
+                             "\n")
+            self.log_substep.write("#control_dt=" + str(self.control_dt) +
+                                   ", dt=" + str(self.dt) +
+                                   ", substeps=" + str(self.sim_substeps) +
+                                   "\n")
 
     def getObjectGlobalCom(self):
         return se3.apply(self.object.getTransform(), self.object.getMass().getCom())
@@ -554,16 +583,29 @@ class HandSimGLViewer(GLRealtimeProgram):
     def idle(self):
         if self.simulate:
             t = 0
+
             while t < self.dt:
                 control_step = min(self.control_dt,self.dt-t)
                 self.control_loop()
                 self.handsim.controlLoop(control_step)
                 #do we want this here or in the substep?
                 self.logger.saveStep(self.handsim.setpoint+self.handsim.tendon_lengths)
+                if self.world_name is not None:
+                    self.log_t.write(str(self.t_sim) +
+                                     " " +
+                                     str(time() - self.t_wall) +
+                                     "\n")
                 for x in range(self.sim_substeps):
                     self.handsim.simLoop(control_step/self.sim_substeps)
                     self.sim.simulate(control_step/self.sim_substeps)
+                    if self.world_name is not None:
+                        self.log_substep.write(
+                            str(self.t_sim + x * control_step / self.sim_substeps) +
+                            " " +
+                            str(time() - self.t_wall) +
+                            "\n")
                 t += self.control_dt
+                self.t_sim += self.control_dt
             glutPostRedisplay()
 
             if self.saveScreenshots and self.ttotal >= self.nextScreenshotTime:
@@ -669,5 +711,3 @@ if __name__=='__main__':
 
     viewer = HandSimGLViewer(handsim, world_name=world_file)
     viewer.run()
-
-    
