@@ -247,7 +247,10 @@ if __name__ == "__main__":
             except AttributeError:
                 print "Module",c.__name__,"must have a make() method"
                 raise
-            controller = maker(world.robot(i))
-        viewer.sim.setController(i,controller)
+            try:
+                controller = maker(world.robot(i), viewer.sim)
+            except:
+                controller = maker(world.robot(i))
+        viewer.sim.setController(world.robot(i),controller)
     
     viewer.run()
