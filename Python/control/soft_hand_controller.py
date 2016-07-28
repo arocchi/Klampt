@@ -147,7 +147,7 @@ class SoftHandController(BaseController):
         f_c, J_c = self.get_contact_forces_and_jacobians()
         tau_c = J_c.T.dot(f_c)
 
-        f_a = R_E_inv_R_T_inv * sigma * self.synergy_reduction + R_E_inv_R_T_inv * np.linalg.inv(self.E).dot(tau_c)
+        f_a = R_E_inv_R_T_inv * sigma * self.synergy_reduction + R_E_inv_R_T_inv * self.R.dot(np.linalg.inv(self.E)).dot(tau_c)
         torque_a = self.K_p*(self.q_a_ref - q_a) \
                    + self.K_d*(0.0 - dq_a) \
                    + self.K_i*self.q_a_int \
