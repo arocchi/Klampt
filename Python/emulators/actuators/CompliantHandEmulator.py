@@ -191,43 +191,43 @@ class CompliantHandEmulator(ActuatorEmulator):
         Contact forces are considered to be applied at the link origin
         """
         n_contacts = 0  # one contact per link
-        if hasattr(self, 'world'):
-            maxid = self.world.numIDs()
-            J_l = dict()
-            f_l = dict()
-            t_l = dict()
-            for l_id in self.u_to_l:
-                l_index = self.l_to_i[l_id]
-                link_in_contact = self.robot.link(l_index)
-                contacts_per_link = 0
-                for j in xrange(maxid):  # TODO compute just one contact per link
-                    contacts_l_id_j = len(self.sim.getContacts(l_id, j))
-                    contacts_per_link += contacts_l_id_j
-                    if contacts_l_id_j > 0:
-                        if not f_l.has_key(l_id):
-                            f_l[l_id] = self.sim.contactForce(l_id, j)
-                            t_l[l_id] = self.sim.contactTorque(l_id, j)
-                        f_l[l_id] = vectorops.add(f_l[l_id], self.sim.contactForce(l_id, j))
-                        t_l[l_id] = vectorops.add(t_l[l_id], self.sim.contactTorque(l_id, j))
-                        ### debugging ###
-                        # print "link", link_in_contact.getName(), """
-                        #      in contact with obj""", self.world.getName(j), """
-                        #      (""", len(self.sim.getContacts(l_id, j)), """
-                        #      contacts)\n f=""",self.sim.contactForce(l_id, j), """
-                        #      t=""", self.sim.contactTorque(l_id, j)
+        maxid = self.world.numIDs()
+        J_l = dict()
+        f_l = dict()
+        t_l = dict()
+        for l_id in self.u_to_l:
+            l_index = self.l_to_i[l_id]
+            link_in_contact = self.robot.link(l_index)
+            contacts_per_link = 0
+            for j in xrange(maxid):  # TODO compute just one contact per link
+                contacts_l_id_j = len(self.sim.getContacts(l_id, j))
+                contacts_per_link += contacts_l_id_j
+                if contacts_l_id_j > 0:
+                    if not f_l.has_key(l_id):
+                        f_l[l_id] = self.sim.contactForce(l_id, j)
+                        t_l[l_id] = self.sim.contactTorque(l_id, j)
+                    f_l[l_id] = vectorops.add(f_l[l_id], self.sim.contactForce(l_id, j))
+                    t_l[l_id] = vectorops.add(t_l[l_id], self.sim.contactTorque(l_id, j))
+                    ### debugging ###
+                    # print "link", link_in_contact.getName(), """
+                    #      in contact with obj""", self.world.getName(j), """
+                    #      (""", len(self.sim.getContacts(l_id, j)), """
+                    #      contacts)\n f=""",self.sim.contactForce(l_id, j), """
+                    #      t=""", self.sim.contactTorque(l_id, j)
 
-                ### debugging ###
-                """
-                if contacts_per_link == 0:
-                    print "link", link_in_contact.getName(), "not in contact"
-                """
-                if contacts_per_link > 0:
-                    n_contacts += 1
-                    J_l[l_id] = np.array(link_in_contact.getJacobian(
-                        (0, 0, 0)))
-                    # print J_l[l_id].shape
+            ### debugging ###
+            """
+            if contacts_per_link == 0:
+                print "link", link_in_contact.getName(), "not in contact"
+            """
+            if contacts_per_link > 0:
+                n_contacts += 1
+                J_l[l_id] = np.array(link_in_contact.getJacobian(
+                    (0, 0, 0)))
+                # print J_l[l_id].shape
         f_c = np.array(6 * n_contacts * [0.0])
         J_c = np.zeros((6 * n_contacts, self.u_dofs))
+        return (f_c, J_c)
 
         for l_in_contact in xrange(len(J_l.keys())):
             f_c[l_in_contact * 6:l_in_contact * 6 + 3
