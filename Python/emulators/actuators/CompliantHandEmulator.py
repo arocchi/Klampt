@@ -27,6 +27,7 @@ class CompliantHandEmulator(ActuatorEmulator):
         self.K_d_m = 0.03
 
         self.synergy_reduction = 7.0  # convert cable tension into motor torque
+        self.effort_scaling = -0.14
 
         self.n_dofs = self.robot.numDrivers()
         self.a_dofs = a_dofs
@@ -155,7 +156,7 @@ class CompliantHandEmulator(ActuatorEmulator):
         tau_c = J_c.T.dot(f_c)
 
         # tendon tension
-        f_a = R_E_inv_R_T_inv.dot(self.R).dot(E_inv).dot(tau_c) + self.synergy_reduction * R_E_inv_R_T_inv.dot(sigma)
+        f_a = self.effort_scaling * R_E_inv_R_T_inv.dot(self.R).dot(E_inv).dot(tau_c) + self.synergy_reduction * R_E_inv_R_T_inv.dot(sigma)
 
         # emulate the synergy PID, notice there is no integrator ATM working on q_a_int
         torque_a = self.K_p * (self.q_a_ref - q_a) \
@@ -167,7 +168,7 @@ class CompliantHandEmulator(ActuatorEmulator):
 
         torque_m = self.K_p_m * (q_u[self.m_to_u] - q_m) - self.K_d_m * dq_m
 
-        q_u_ref = (-E_inv + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(self.R).dot(E_inv).dot(tau_c)) + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(sigma) * self.synergy_reduction
+        q_u_ref = self.effort_scaling * (-E_inv + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(self.R).dot(E_inv)).dot(tau_c) + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(sigma) * self.synergy_reduction
 
         torque[self.a_to_n] = torque_a
         torque[self.u_to_n] = torque_u
@@ -176,6 +177,7 @@ class CompliantHandEmulator(ActuatorEmulator):
         qdes = np.array(self.controller.getCommandedConfig())
         qdes[[self.q_to_t[u_id] for u_id in self.u_to_n]] = q_u_ref
         qdes[[self.q_to_t[m_id] for m_id in self.m_to_n]] = q_u_ref
+
         # print 'q_u:', q_u
         # print 'q_a_ref-q_a:',self.q_a_ref-q_a
         # print 'q_u-q_m:', q_u[self.m_to_u]-q_m
