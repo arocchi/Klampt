@@ -68,6 +68,8 @@ class HandEmulator(CompliantHandEmulator):
     def __init__(self, sim, robotindex=0, link_offset=0, driver_offset=0):
         CompliantHandEmulator.__init__(self, sim, robotindex, link_offset, driver_offset, a_dofs=3, d_dofs=1, u_dofs=6)
 
+        self.synergy_reduction = -1.0
+
         print 'Reflex Hand loaded.'
 
     def loadHandParameters(self):
