@@ -130,7 +130,13 @@ class CompliantHandEmulator(ActuatorEmulator):
         print 'E:', self.E
 
     def output(self):
+        """
+        @return (torque, qdes) where #torque = n_dofs, #qdes = n_links
+        """
         torque = np.array(self.n_dofs * [0.0])
+        g_q = np.array(self.robot.getGravityForces([0,0,-9.81]))
+        # gravity compensation
+        torque = g_q[self.q_to_t]
 
         q = np.array(self.controller.getSensedConfig())
 
@@ -170,9 +176,9 @@ class CompliantHandEmulator(ActuatorEmulator):
 
         q_u_ref = self.effort_scaling * (-E_inv + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(self.R).dot(E_inv)).dot(tau_c) + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(sigma) * self.synergy_reduction
 
-        torque[self.a_to_n] = torque_a
-        torque[self.u_to_n] = torque_u
-        torque[self.m_to_n] = torque_m
+        torque[self.a_to_n] = torque_a # synergy actuators are affected by gravity
+        torque[self.u_to_n] += torque_u # underactuated joints are emulated, no gravity
+        torque[self.m_to_n] += torque_m # mimic joints are emulated, no gravity
 
         qdes = np.array(self.controller.getCommandedConfig())
         qdes[[self.q_to_t[u_id] for u_id in self.u_to_n]] = q_u_ref
@@ -183,6 +189,11 @@ class CompliantHandEmulator(ActuatorEmulator):
         # print 'q_u-q_m:', q_u[self.m_to_u]-q_m
         # print 'tau_u:', torque_u
 
+        # quirk: torque has n_dofs elements, qdes has n_links elements.
+        # setPIDCommand accepts a qdes of either n_links or n_dofs size, but
+        # requires a torque sized as n_dofs. We will therefore return the full
+        # qdes so that we can use controller.getCommandedVelocity() as velocity term of the PID
+        # (which returns a vector sized n_links)
         return torque, qdes
 
     def initR(self):
