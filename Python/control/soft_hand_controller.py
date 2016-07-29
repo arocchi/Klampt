@@ -95,7 +95,7 @@ class SoftHandController(BaseController):
                     joint_count = joint_count+1
 
         # loading elasticity and reduction map
-        self.R = np.array(self.u_dofs*[0.0]).T
+        self.R = np.zeros((self.a_dofs, self.u_dofs))
         self.E = np.eye(self.u_dofs)
 
         for i in xrange(robot.numDrivers()):
@@ -104,7 +104,7 @@ class SoftHandController(BaseController):
             u_id = self.n_to_u[i]
             if u_id != -1:
                 joint_position = self.paramsLoader.phalanxToJoint(finger,phalanx)
-                self.R[u_id] = self.paramsLoader.handParameters[finger][joint_position]['r']
+                self.R[0, u_id] = self.paramsLoader.handParameters[finger][joint_position]['r']
                 self.E[u_id,u_id] = self.paramsLoader.handParameters[finger][joint_position]['e']
 
         print 'Soft Hand loaded.'
@@ -112,7 +112,6 @@ class SoftHandController(BaseController):
         print 'Underactuated Joint Indices:', self.hand
         print 'Joint parameters:', self.paramsLoader.handParameters
         print 'R:', self.R
-        #self.E = 20 * self.E
         print 'E:', self.E
 
     def output(self, **inputs):
@@ -142,20 +141,27 @@ class SoftHandController(BaseController):
         while self.q_a_ref < 1.0:
             self.q_a_ref = self.q_a_ref + 0.001
 
-        R_E_inv_R_T_inv = 1.0 / (self.R.dot(np.linalg.inv(self.E)).dot(self.R.T))
+        E_inv = np.linalg.inv(self.E)
+        R_E_inv_R_T_inv = np.linalg.inv(self.R.dot(E_inv).dot(self.R.T))
         sigma = q_a # q_a goes from 0.0 to 1.0
         f_c, J_c = self.get_contact_forces_and_jacobians()
         tau_c = J_c.T.dot(f_c)
 
-        f_a = R_E_inv_R_T_inv * sigma * self.synergy_reduction + R_E_inv_R_T_inv * self.R.dot(np.linalg.inv(self.E)).dot(tau_c)
+        f_a = R_E_inv_R_T_inv.dot(sigma) * self.synergy_reduction + R_E_inv_R_T_inv.dot(self.R).dot(E_inv).dot(tau_c)
+        print "f_a:",f_a
         torque_a = self.K_p*(self.q_a_ref - q_a) \
                    + self.K_d*(0.0 - dq_a) \
                    + self.K_i*self.q_a_int \
                    - (f_a / self.synergy_reduction)
+        print "torque_a:", torque_a
+        torque_u = (self.R.T).dot(f_a) - self.E.dot(q_u)
+        print "torque_u:", torque_u
 
-        torque_u = self.R.T*f_a - self.E.dot(q_u)
         torque_m = self.K_p_m*(q_u[self.m_to_u] - q_m) - self.K_d_m*dq_m
 
+        torque.fill(0.0)
+        torque[self.u_to_n] = torque_u
+        print "tau:", torque
         torque[self.a_to_n] = torque_a
         torque[self.u_to_n] = torque_u
         torque[self.m_to_n] = torque_m
