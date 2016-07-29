@@ -148,14 +148,15 @@ class CompliantHandEmulator(ActuatorEmulator):
         # updates self.R
         self.updateR(q_u)
 
-        R_E_inv_R_T_inv = np.linalg.inv(self.R.dot(np.linalg.inv(self.E)).dot(self.R.T))
+        E_inv = np.linalg.inv(self.E)
+        R_E_inv_R_T_inv = np.linalg.inv(self.R.dot(E_inv).dot(self.R.T))
         sigma = q_a  # q_a goes from 0.0 to 1.0
         f_c, J_c = self.get_contact_forces_and_jacobians()
         tau_c = J_c.T.dot(f_c)
 
         # tendon tension
-        f_a = R_E_inv_R_T_inv.dot(sigma) * self.synergy_reduction + R_E_inv_R_T_inv.dot(self.R).dot(
-            np.linalg.inv(self.E).dot(tau_c))
+        f_a = R_E_inv_R_T_inv.dot(self.R).dot(E_inv).dot(tau_c) + self.synergy_reduction * R_E_inv_R_T_inv.dot(sigma)
+
         # emulate the synergy PID, notice there is no integrator ATM working on q_a_int
         torque_a = self.K_p * (self.q_a_ref - q_a) \
                    + self.K_d * (0.0 - dq_a) \
@@ -166,17 +167,21 @@ class CompliantHandEmulator(ActuatorEmulator):
 
         torque_m = self.K_p_m * (q_u[self.m_to_u] - q_m) - self.K_d_m * dq_m
 
+        q_u_ref = (-E_inv + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(self.R).dot(E_inv).dot(tau_c)) + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(sigma) * self.synergy_reduction
+
         torque[self.a_to_n] = torque_a
         torque[self.u_to_n] = torque_u
         torque[self.m_to_n] = torque_m
 
+        qdes = np.array(self.controller.getCommandedConfig())
+        qdes[[self.q_to_t[u_id] for u_id in self.u_to_n]] = q_u_ref
+        qdes[[self.q_to_t[m_id] for m_id in self.m_to_n]] = q_u_ref
         # print 'q_u:', q_u
         # print 'q_a_ref-q_a:',self.q_a_ref-q_a
         # print 'q_u-q_m:', q_u[self.m_to_u]-q_m
         # print 'tau_u:', torque_u
 
-        return torque
-
+        return torque, qdes
 
     def initR(self):
         q = np.array(self.controller.getSensedConfig())
@@ -227,7 +232,6 @@ class CompliantHandEmulator(ActuatorEmulator):
                 # print J_l[l_id].shape
         f_c = np.array(6 * n_contacts * [0.0])
         J_c = np.zeros((6 * n_contacts, self.u_dofs))
-        return (f_c, J_c)
 
         for l_in_contact in xrange(len(J_l.keys())):
             f_c[l_in_contact * 6:l_in_contact * 6 + 3
@@ -262,16 +266,18 @@ class CompliantHandEmulator(ActuatorEmulator):
             if 'force' in commands:
                 pass
 
-        qdes = np.array(self.controller.getCommandedConfig())
+        torque, qdes = self.output()
+        #qdes = np.array(self.controller.getCommandedConfig())
         qdes[[self.q_to_t[d_id] for d_id in self.d_to_n]] = self.q_d_ref
         dqdes = self.controller.getCommandedVelocity()
-        self.controller.setPIDCommand(qdes, dqdes, self.output())
+        self.controller.setPIDCommand(qdes, dqdes, torque)
 
     def substep(self, dt):
-        qdes = np.array(self.controller.getCommandedConfig())
+        torque, qdes = self.output()
+        #qdes = np.array(self.controller.getCommandedConfig())
         qdes[[self.q_to_t[d_id] for d_id in self.d_to_n]] = self.q_d_ref
         dqdes = self.controller.getCommandedVelocity()
-        self.controller.setPIDCommand(qdes, dqdes, self.output())
+        self.controller.setPIDCommand(qdes, dqdes, torque)
 
 
     def drawGL(self):
