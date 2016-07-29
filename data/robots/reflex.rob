@@ -39,8 +39,8 @@ Tparent 1 0 0   0 1 0   0 0 1   0 0 0 \
 1 0 0 0 1 0 0 0 1 0 0 0 \
 1 0 0 0 1 0 0 0 1 0 0 0 \
 
-qmin    0   0   0      -0.34   -inf    0   0   -1.5708 -0.34   -inf    0   0   -0.34   -inf    0   0 0 0 0
-qmax    0   0   1.5708  2.83    inf    0   0   0        2.83    inf    0   0    2.83    inf    0   0 1 1 1
+qmin    0   0   0      -0.34   -3.14    0   0   -1.5708 -0.34   -3.14    0   0   -0.34   -3.14    0   0 0 0 0
+qmax    0   0   1.5708  2.83    3.14    0   0   0        2.83    3.14    0   0    2.83    3.14    0   0 1 1 1
 
 geometry    reflex/reduced/base_link.STL    reflex/reduced/pad.STL  reflex/reduced/swivel_1.STL reflex/reduced/proximal_1.STL   reflex/reduced/distal_1.STL reflex/reduced/distal_pad_1.STL reflex/reduced/proximal_pad_1.STL   reflex/reduced/swivel_2.STL reflex/reduced/proximal_2.STL   reflex/reduced/distal_2.STL reflex/reduced/distal_pad_2.STL reflex/reduced/proximal_pad_2.STL   reflex/reduced/proximal_3.STL   reflex/reduced/distal_3.STL reflex/reduced/distal_pad_3.STL reflex/reduced/proximal_pad_3.STL "" "" ""
 
@@ -66,17 +66,17 @@ accmax  0   0   10  10  10  0   0   10  10  10  0   0   10  10  0   0 10 10 10
 joint weld 0                                                                                                                                                                            
 joint weld 1                                                                                                                                                                            
 joint normal 2                                                                                                                                                                          
-joint spin 3                                                                                                                                                                            
-joint spin 4                                                                                                                                                                            
+joint normal 3                                                                                                                                                                            
+joint normal 4                                                                                                                                                                            
 joint weld 5                                                                                                                                                                            
 joint weld 6                                                                                                                                                                            
 joint normal 7                                                                                                                                                                          
-joint spin 8                                                                                                                                                                            
-joint spin 9                                                                                                                                                                            
+joint normal 8                                                                                                                                                                            
+joint normal 9                                                                                                                                                                            
 joint weld 10                                                                                                                                                                           
 joint weld 11                                                                                                                                                                           
-joint spin 12                                                                                                                                                                           
-joint spin 13                                                                                                                                                                           
+joint normal 12                                                                                                                                                                           
+joint normal 13                                                                                                                                                                           
 joint weld 14                                                                                                                                                                           
 joint weld 15   
 joint normal 16                                                                                                                                                                     
