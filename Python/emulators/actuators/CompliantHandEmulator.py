@@ -246,7 +246,7 @@ class CompliantHandEmulator(ActuatorEmulator):
             ] = t_l.values()[l_in_contact]
             J_c[l_in_contact * 6:l_in_contact * 6 + 6,
             :] = np.array(
-                J_l.values()[l_in_contact])[:, self.u_to_n]
+                J_l.values()[l_in_contact])[:, [self.q_to_t[u_id] for u_id in self.u_to_n]]
         return (f_c, J_c)
 
 
