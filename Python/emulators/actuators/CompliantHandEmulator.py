@@ -241,9 +241,9 @@ class CompliantHandEmulator(ActuatorEmulator):
 
         for l_in_contact in xrange(len(J_l.keys())):
             f_c[l_in_contact * 6:l_in_contact * 6 + 3
-            ] = f_l.values()[l_in_contact]
+            ] = t_l.values()[l_in_contact] # Jacobian has angular velocity first, then linear
             f_c[l_in_contact * 6 + 3:l_in_contact * 6 + 6
-            ] = t_l.values()[l_in_contact]
+            ] = f_l.values()[l_in_contact] # Jacobian has angular velocity first, then linear
             J_c[l_in_contact * 6:l_in_contact * 6 + 6,
             :] = np.array(
                 J_l.values()[l_in_contact])[:, [self.q_to_t[u_id] for u_id in self.u_to_n]]
