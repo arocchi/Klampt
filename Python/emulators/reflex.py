@@ -68,7 +68,7 @@ class HandEmulator(CompliantHandEmulator):
     def __init__(self, sim, robotindex=0, link_offset=0, driver_offset=0):
         CompliantHandEmulator.__init__(self, sim, robotindex, link_offset, driver_offset, a_dofs=3, d_dofs=1, u_dofs=6)
 
-        self.synergy_reduction = -1.0
+        self.synergy_reduction = -3.0
         self.effort_scaling = -1.0
         self.model = HandModel(self.robot, link_offset, driver_offset)
 
@@ -151,23 +151,18 @@ class HandEmulator(CompliantHandEmulator):
         da_vinci_f_i = np.ndarray((1,self.u_dofs_per_finger))
 
         # base pulley radius
-        r0 = 0.1
+        r0 = 0.02
         # proximal phalanx equivalent pulley radius
-        r1 = 0.01
+        r1 = 0.002
         # the distal link does not have a pulley
         r2 = 0.0
 
-        a0 = 0.1
-        b0 = 0.1
-        l0 = 0.1
+        a1 = 0.04
+        b1 = 0.0021
+        l1 = 0.05
 
-        a1 = 0.1
-        b1 = 0.1
-        l1 = 0.1
-
-        a2 = 0.1
-        b2 = 0.1
-        l2 = 0.1
+        a2 = 0.01
+        b2 = 0.0
 
 
         # for each finger
@@ -175,14 +170,14 @@ class HandEmulator(CompliantHandEmulator):
             # from q to theta
             theta_1_u_id = self.hand[i]['f_to_u'][0]
             theta_2_u_id = self.hand[i]['f_to_u'][1]
-            theta_1 = q_u[theta_1_u_id]
-            theta_2 = q_u[theta_2_u_id]
+            theta_1 = 0.5*np.pi - q_u[theta_1_u_id]
+            theta_2 = 0.5*np.pi - q_u[theta_2_u_id]
 
             # from Birglen et al, 2007, page 55
             r = r2 - r1
             a = l1 - a1 + a2*np.cos(theta_2) - b2*np.sin(theta_2)
             b = -b1 + a2*np.sin(theta_2) + b2*np.cos(theta_2)
-            l = a**2 + b**2 - r**2
+            l = (a**2 + b**2 - r**2)**0.5
             R1 = r1 + (b1*(r*b - a*l) - (l1-a1)*(a*r + b*l))/(a**2+b**2)
 
             # from Birglen Transmission matrix to R
@@ -263,7 +258,7 @@ class HandSimGLViewer(GLSimulationProgram):
         l2i = self.handsim.l_to_i
         link_index_to_id = {y: x for x, y in l2i.iteritems()}
         finger1_l_id, finger2_l_id, finger3_l_id = [link_index_to_id[index] for index in pl]
-        force_at_com = [0, 0, -5.0]
+        force_at_com = [0, 0, -1.0]
         wrench_at_base = dict()
         for l_id in [finger1_l_id, finger2_l_id, finger3_l_id]:
             l = self.handsim.robot.link(self.handsim.l_to_i[l_id])
