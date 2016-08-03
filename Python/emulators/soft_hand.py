@@ -46,7 +46,7 @@ class HandEmulator(CompliantHandEmulator):
         CompliantHandEmulator.__init__(self, sim, robotindex, link_offset, driver_offset, a_dofs=1, d_dofs=0)
 
         self.synergy_reduction = 7.0  # convert cable tension into motor torque
-        self.effort_scaling = -0.3
+        self.effort_scaling = 1.0
 
         print 'Mimic Joint Info:', self.mimic
         print 'Underactuated Joint Info:', self.hand
@@ -163,10 +163,21 @@ class HandSimGLViewer(GLSimulationProgram):
         for l_id in self.handsim.virtual_contacts:
             glColor3f(0,1,0)
             forcelen = 0.1
-            b = self.sim.body(self.handsim.robot.link(self.handsim.l_to_i[l_id]))
-            glVertex3f(*se3.apply(b.getTransform(), [0,0,0]))
-            glVertex3f(*se3.apply(b.getTransform(), vectorops.madd([0,0,0],self.handsim.virtual_wrenches[l_id][0:3],forcelen)))
+            l = self.handsim.robot.link(self.handsim.l_to_i[l_id])
+            b = self.sim.body(l)
+            p = [0,0,0]
+            f = self.handsim.virtual_wrenches[l_id][0:3]
+            glVertex3f(*se3.apply(b.getTransform(), p))
+            glVertex3f(*se3.apply(b.getTransform(), vectorops.madd(p,f,forcelen)))
+            """
+            # draw local link frame
+            for color in {(1, 0, 0), (0, 1, 0), (0, 0, 1)}:
+                glColor3f(*color)
+                glVertex3f(*se3.apply(b.getTransform(), p))
+                glVertex3f(*se3.apply(b.getTransform(), vectorops.madd(p, color, 0.1)))
+            """
         glEnd()
+
         glLineWidth(1)
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_LIGHTING)
@@ -175,9 +186,11 @@ class HandSimGLViewer(GLSimulationProgram):
         if self.simulate:
             for l_id in self.handsim.virtual_contacts:
                 glColor3f(0, 1, 0)
-                forcelen = 0.1
-                b = self.sim.body(self.handsim.robot.link(self.handsim.l_to_i[l_id]))
-                b.applyForceAtLocalPoint(self.handsim.virtual_wrenches[l_id][0:3],[0,0,0])
+                l = self.handsim.robot.link(self.handsim.l_to_i[l_id])
+                b = self.sim.body(l)
+                f = self.handsim.virtual_wrenches[l_id][0:3]
+                p = [0,0,0]
+                b.applyForceAtLocalPoint(se3.apply_rotation(b.getTransform(),f),p)
             self.control_loop()
             self.sim.simulate(self.control_dt)
             glutPostRedisplay()
@@ -203,7 +216,7 @@ class HandSimGLViewer(GLSimulationProgram):
             self.handsim.setCommand(u)
         elif c == 'q':
             self.handsim.virtual_contacts[index_distal_id] = True
-            self.handsim.virtual_wrenches[index_distal_id] = np.array([0,0,-1.0,0,0,0])
+            self.handsim.virtual_wrenches[index_distal_id] = np.array([0,0.0,-50.0,0,0,0])
         elif c == 'a':
             if self.handsim.virtual_contacts.has_key(index_distal_id):
                 self.handsim.virtual_contacts.pop(index_distal_id)
