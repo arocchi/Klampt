@@ -1,4 +1,4 @@
-from klampt import vectorops
+from klampt import vectorops, se3
 from klampt.simulation import ActuatorEmulator
 import numpy as np
 
@@ -217,12 +217,16 @@ class CompliantHandEmulator(ActuatorEmulator):
                     #      contacts)\n f=""",self.sim.contactForce(l_id, j), """
                     #      t=""", self.sim.contactTorque(l_id, j)
             if self.virtual_contacts.has_key(l_id):
+                b = self.sim.body(link_in_contact)
+
+                f_v = se3.apply_rotation(b.getTransform(),self.virtual_wrenches[l_id][0:3])
+                t_v = se3.apply_rotation(b.getTransform(),self.virtual_wrenches[l_id][3:6])
                 if not f_l.has_key(l_id):
-                    f_l[l_id] = self.virtual_wrenches[l_id][0:3]
-                    t_l[l_id] = self.virtual_wrenches[l_id][3:6]
+                    f_l[l_id] = f_v
+                    t_l[l_id] = t_v
                 else:
-                    f_l[l_id] = vectorops.add(f_l[l_id], self.virtual_wrenches[l_id][0:3])
-                    t_l[l_id] = vectorops.add(t_l[l_id], self.virtual_wrenches[l_id][3:6])
+                    f_l[l_id] = f_v
+                    t_l[l_id] = t_v
 
 
             ### debugging ###
