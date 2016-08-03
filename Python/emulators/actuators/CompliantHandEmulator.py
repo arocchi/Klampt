@@ -155,7 +155,7 @@ class CompliantHandEmulator(ActuatorEmulator):
 
         torque_m = len(self.m_to_u)*[0.0] # 0 offset
 
-        q_u_ref = self.effort_scaling * (-E_inv + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(self.R).dot(E_inv)).dot(tau_c) + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(sigma) * self.synergy_reduction
+        q_u_ref = self.effort_scaling * (-E_inv + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(self.R).dot(E_inv)).dot(tau_c) + self.synergy_reduction * E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(sigma)
 
         torque[self.a_to_n] = torque_a # synergy actuators are affected by gravity
         torque[self.u_to_n] += torque_u # underactuated joints are emulated, no gravity
@@ -205,7 +205,6 @@ class CompliantHandEmulator(ActuatorEmulator):
                 contacts_per_link += contacts_l_id_j
                 if contacts_l_id_j > 0:
                     if not f_l.has_key(l_id):
-                        print "+"
                         f_l[l_id] = self.sim.contactForce(l_id, j)
                         t_l[l_id] = self.sim.contactTorque(l_id, j)
                     else:
@@ -235,7 +234,9 @@ class CompliantHandEmulator(ActuatorEmulator):
                 n_contacts += 1
                 J_l[l_id] = np.array(link_in_contact.getJacobian(
                     (0, 0, 0)))
-                # print J_l[l_id].shape
+                self.robot.setConfig(self.controller.getSensedConfig())
+                #print "J_l[l_id]:\n",J_l[l_id]
+                #print "J_l shape", J_l[l_id].shape
         f_c = np.array(6 * n_contacts * [0.0])
         J_c = np.zeros((6 * n_contacts, self.u_dofs))
 
@@ -247,6 +248,7 @@ class CompliantHandEmulator(ActuatorEmulator):
             J_c[l_in_contact * 6:l_in_contact * 6 + 6,
             :] = np.array(
                 J_l.values()[l_in_contact])[:, [self.q_to_t[u_id] for u_id in self.u_to_n]]
+        #print f_c, J_c
         return (f_c, J_c)
 
 
