@@ -69,7 +69,7 @@ class HandEmulator(CompliantHandEmulator):
         CompliantHandEmulator.__init__(self, sim, robotindex, link_offset, driver_offset, a_dofs=3, d_dofs=1, u_dofs=6)
 
         self.synergy_reduction = -1.0
-        self.effort_scaling = 1.0
+        self.effort_scaling = -1.0
         self.model = HandModel(self.robot, link_offset, driver_offset)
 
         print 'Reflex Hand loaded.'
@@ -239,8 +239,8 @@ class HandSimGLViewer(GLSimulationProgram):
                 glColor3f(0, 1, 0)
                 l = self.handsim.robot.link(self.handsim.l_to_i[l_id])
                 b = self.sim.body(l)
-                com = l.getMass().getCom()
                 f = self.handsim.virtual_wrenches[l_id][0:3]
+                com = l.getMass().getCom()
                 b.applyForceAtLocalPoint(se3.apply_rotation(b.getTransform(),f),com) # could also use applyWrench with moment=[0,0,0]
             self.control_loop()
             self.sim.simulate(self.control_dt)
@@ -259,19 +259,19 @@ class HandSimGLViewer(GLSimulationProgram):
     def keyboardfunc(self,c,x,y):
         #Put your keyboard handler here
         #the current example toggles simulation / movie mode
-        pl = self.handsim.model.distal_links
+        pl = self.handsim.model.proximal_links
         l2i = self.handsim.l_to_i
         link_index_to_id = {y: x for x, y in l2i.iteritems()}
-        finger1_distal_id, finger2_distal_id, finger3_distal_id = [link_index_to_id[index] for index in pl]
+        finger1_l_id, finger2_l_id, finger3_l_id = [link_index_to_id[index] for index in pl]
         force_at_com = [0, 0, -5.0]
         wrench_at_base = dict()
-        for l_id in [finger1_distal_id, finger2_distal_id, finger3_distal_id]:
+        for l_id in [finger1_l_id, finger2_l_id, finger3_l_id]:
             l = self.handsim.robot.link(self.handsim.l_to_i[l_id])
             b = self.sim.body(l)
             com = np.array(l.getMass().getCom())
             # m_b = m_com + f_com x com_b
             # com_b = -b_com = -com
-            wrench_at_base[l_id] = tuple(force_at_com)# + vectorops.cross(-com, force_at_com)
+            wrench_at_base[l_id] = tuple(force_at_com) + vectorops.cross(-com, force_at_com)
 
         if c=='y':
             u = self.handsim.getCommand()
@@ -306,29 +306,29 @@ class HandSimGLViewer(GLSimulationProgram):
             u[3] -= 0.1
             self.handsim.setCommand(u)
         elif c == 'e':
-            self.handsim.virtual_contacts[finger1_distal_id] = True
-            self.handsim.virtual_wrenches[finger1_distal_id] = np.array(wrench_at_base[finger1_distal_id])
+            self.handsim.virtual_contacts[finger1_l_id] = True
+            self.handsim.virtual_wrenches[finger1_l_id] = np.array(wrench_at_base[finger1_l_id])
         elif c == 'd':
-            if self.handsim.virtual_contacts.has_key(finger1_distal_id):
-                self.handsim.virtual_contacts.pop(finger1_distal_id)
-            if self.handsim.virtual_wrenches.has_key(finger1_distal_id):
-                self.handsim.virtual_wrenches.pop(finger1_distal_id)
+            if self.handsim.virtual_contacts.has_key(finger1_l_id):
+                self.handsim.virtual_contacts.pop(finger1_l_id)
+            if self.handsim.virtual_wrenches.has_key(finger1_l_id):
+                self.handsim.virtual_wrenches.pop(finger1_l_id)
         elif c == 'r':
-            self.handsim.virtual_contacts[finger2_distal_id] = True
-            self.handsim.virtual_wrenches[finger2_distal_id] = np.array(wrench_at_base[finger2_distal_id])
+            self.handsim.virtual_contacts[finger2_l_id] = True
+            self.handsim.virtual_wrenches[finger2_l_id] = np.array(wrench_at_base[finger2_l_id])
         elif c == 'f':
-            if self.handsim.virtual_contacts.has_key(finger2_distal_id):
-                self.handsim.virtual_contacts.pop(finger2_distal_id)
-            if self.handsim.virtual_wrenches.has_key(finger2_distal_id):
-                self.handsim.virtual_wrenches.pop(finger2_distal_id)
+            if self.handsim.virtual_contacts.has_key(finger2_l_id):
+                self.handsim.virtual_contacts.pop(finger2_l_id)
+            if self.handsim.virtual_wrenches.has_key(finger2_l_id):
+                self.handsim.virtual_wrenches.pop(finger2_l_id)
         elif c == 't':
-            self.handsim.virtual_contacts[finger3_distal_id] = True
-            self.handsim.virtual_wrenches[finger3_distal_id] = np.array(wrench_at_base[finger3_distal_id])
+            self.handsim.virtual_contacts[finger3_l_id] = True
+            self.handsim.virtual_wrenches[finger3_l_id] = np.array(wrench_at_base[finger3_l_id])
         elif c == 'g':
-            if self.handsim.virtual_contacts.has_key(finger3_distal_id):
-                self.handsim.virtual_contacts.pop(finger3_distal_id)
-            if self.handsim.virtual_wrenches.has_key(finger3_distal_id):
-                self.handsim.virtual_wrenches.pop(finger3_distal_id)
+            if self.handsim.virtual_contacts.has_key(finger3_l_id):
+                self.handsim.virtual_contacts.pop(finger3_l_id)
+            if self.handsim.virtual_wrenches.has_key(finger3_l_id):
+                self.handsim.virtual_wrenches.pop(finger3_l_id)
         else:
             GLSimulationProgram.keyboardfunc(self,c,x,y)
         glutPostRedisplay()
