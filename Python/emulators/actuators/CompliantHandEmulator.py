@@ -16,9 +16,6 @@ class CompliantHandEmulator(ActuatorEmulator):
 
         self.hand = dict()
         self.mimic = dict()
-        self.n_dofs = 0
-
-        self.q_a_int = 0.0
 
         self.synergy_reduction = 1.0  # convert cable tension into motor torque
         self.effort_scaling = -1.0
@@ -48,6 +45,10 @@ class CompliantHandEmulator(ActuatorEmulator):
         # used to apply virtual forces to fingers - used for debugging purposes
         self.virtual_contacts = dict()
         self.virtual_wrenches = dict()
+
+        self.tau_c = None           #
+        self.f_a = np.array(self.a_dofs * [0.0])
+        self.g_c = None             # we store here gravity compensation torques
 
         for i in xrange(self.robot.numDrivers()):
             driver = self.robot.driver(i)
@@ -119,9 +120,9 @@ class CompliantHandEmulator(ActuatorEmulator):
         @return (torque, qdes) where #torque = n_dofs, #qdes = n_links
         """
         torque = np.array(self.n_dofs * [0.0])
-        g_q = np.array(self.robot.getGravityForces([0,0,-9.81]))
+        self.g_q = np.array(self.robot.getGravityForces([0,0,-9.81]))
         # gravity compensation
-        torque = g_q[self.q_to_t]
+        torque = self.g_q[self.q_to_t]
 
         q = np.array(self.controller.getSensedConfig())
 
@@ -144,18 +145,18 @@ class CompliantHandEmulator(ActuatorEmulator):
         R_E_inv_R_T_inv = np.linalg.inv(self.R.dot(E_inv).dot(self.R.T))
         sigma = q_a  # q_a goes from 0.0 to 1.0
         f_c, J_c = self.get_contact_forces_and_jacobians()
-        tau_c = J_c.T.dot(f_c)
+        self.tau_c = J_c.T.dot(f_c)
 
         # tendon tension
-        f_a =  self.effort_scaling * R_E_inv_R_T_inv.dot(self.R).dot(E_inv).dot(tau_c) + self.synergy_reduction * R_E_inv_R_T_inv.dot(sigma)
+        self.f_a =  self.effort_scaling * R_E_inv_R_T_inv.dot(self.R).dot(E_inv).dot(self.tau_c) + self.synergy_reduction * R_E_inv_R_T_inv.dot(sigma)
 
-        torque_a = - (f_a / self.synergy_reduction) # f_a offset
+        torque_a = 0.0 * (self.f_a / self.synergy_reduction) # f_a offset
 
-        torque_u = self.R.T.dot(f_a) - self.E.dot(q_u)
+        torque_u = self.R.T.dot(self.f_a) - self.E.dot(q_u)
 
         torque_m = len(self.m_to_u)*[0.0] # 0 offset
 
-        q_u_ref = self.effort_scaling * (-E_inv + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(self.R).dot(E_inv)).dot(tau_c) + self.synergy_reduction * E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(sigma)
+        q_u_ref = self.effort_scaling * (-E_inv + E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(self.R).dot(E_inv)).dot(self.tau_c) + self.synergy_reduction * E_inv.dot(self.R.T).dot(R_E_inv_R_T_inv).dot(sigma)
 
         torque[self.a_to_n] = torque_a # synergy actuators are affected by gravity
         torque[self.u_to_n] += torque_u # underactuated joints are emulated, no gravity
@@ -171,6 +172,10 @@ class CompliantHandEmulator(ActuatorEmulator):
         # print 'q_a_ref-q_a:',self.q_a_ref-q_a
         # print 'q_u-q_m:', q_u[self.m_to_u]-q_m
         # print 'tau_u:', torque_u
+        # print "tau_c", self.tau_c
+        # print "f_a", self.f_a
+        # print "q_a_ref", self.q_a_ref
+        # print "sigma", sigma
 
         # quirk: torque has n_dofs elements, qdes has n_links elements.
         # setPIDCommand accepts a qdes of either n_links or n_dofs size, but
