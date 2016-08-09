@@ -1,5 +1,5 @@
 mesh "untitled_small.stl"
-geomscale .5 .5 .5
+geomscale 1. 1. 1.
 mass 1
 autoMass
 kStiffness 10000
