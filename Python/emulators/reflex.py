@@ -69,7 +69,7 @@ class HandEmulator(CompliantHandEmulator):
         CompliantHandEmulator.__init__(self, sim, robotindex, link_offset, driver_offset, a_dofs=3, d_dofs=1, u_dofs=6)
 
         #self.synergy_reduction = 10.5
-        self.synergy_reduction = 3.5
+        self.synergy_reduction = 3.6
         self.effort_scaling = 10.5
         self.model = HandModel(self.robot, link_offset, driver_offset)
 
@@ -146,8 +146,8 @@ class HandEmulator(CompliantHandEmulator):
         self.E[0, 0] = self.E[2, 2] = self.E[4, 4] = 1.0
         self.E[1, 1] = self.E[3, 3] = self.E[5, 5] = 2.0
 
-        self.q_u_rest = np.array(self.n_fingers*[-0.3,0.0])
-        self.sigma_offset = np.array(self.a_dofs * [0.07])
+        self.q_u_rest = np.array(self.n_fingers*[-0.34,0.0])
+        self.sigma_offset = np.array(self.a_dofs * [0.1])
         self.initR()
 
     def updateR(self, q_u):
@@ -191,6 +191,16 @@ class HandEmulator(CompliantHandEmulator):
 
             self.R[i,i*2:i*2+2] = da_vinci_f_i
         return self.R
+
+    def setCommand(self, command):
+        self.q_a_ref = np.array([1.0 - self.sigma_offset[i] - max(min(v, 1), 0) for i, v in enumerate(command) if i < self.a_dofs])
+        self.q_d_ref = np.array([max(min(v, 1), 0) for i, v in enumerate(command) if
+                        i >= self.a_dofs and i < self.a_dofs + self.d_dofs])
+        print command
+
+
+    def getCommand(self):
+        return np.hstack([1.0 - self.sigma_offset - self.q_a_ref, self.q_d_ref])
 
 class HandSimGLViewer(GLSimulationProgram):
     def __init__(self,world,base_link=0,base_driver=0):

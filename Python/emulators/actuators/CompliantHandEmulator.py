@@ -276,8 +276,8 @@ class CompliantHandEmulator(ActuatorEmulator):
 
 
     def setCommand(self, command):
-        self.q_a_ref = [max(min(v, 1), 0) for i, v in enumerate(command) if i < self.a_dofs]
-        self.q_d_ref = [max(min(v, 1), 0) for i, v in enumerate(command) if i >= self.a_dofs and i < self.a_dofs + self.d_dofs]
+        self.q_a_ref = np.array([max(min(v, 1), 0) for i, v in enumerate(command) if i < self.a_dofs])
+        self.q_d_ref = np.array([max(min(v, 1), 0) for i, v in enumerate(command) if i >= self.a_dofs and i < self.a_dofs + self.d_dofs])
 
     def getCommand(self):
         return np.hstack([self.q_a_ref, self.q_d_ref])
