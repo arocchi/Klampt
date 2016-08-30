@@ -141,7 +141,7 @@ class HandEmulator(CompliantHandEmulator):
 
 class HandSimGLViewer(GLSimulationProgram):
     def __init__(self,world,base_link=0,base_driver=0):
-        GLSimulationProgram.__init__(self,world,"SoftHand simulation program")
+        GLSimulationProgram.__init__(self,world,"Reflex simulation program")
         self.handsim = HandEmulator(self.sim,0,base_link,base_driver)
         self.sim.addEmulator(0,self.handsim)
         self.control_dt = 0.01
