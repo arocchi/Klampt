@@ -26,18 +26,24 @@ class Simulator;
 /** @brief A sensor on a simulated robot.  Retreive this from the controller,
  * and use getMeasurements to get the currently simulated measurement vector.
  *
- * type() gives you a string defining the sensor type.
- * measurementNames() gives you a list of names for the measurements.
+ * - type() gives you a string defining the sensor type.
+ * - measurementNames() gives you a list of names for the measurements.
+ * - drawGL() draws a sensor indicator using OpenGL
+ * - drawGL(measurements) draws a sensor indicator and its measurements
+ *   using OpenGL.
  */
 class SimRobotSensor
 {
  public:
-  SimRobotSensor(SensorBase* sensor);
+  SimRobotSensor(Robot* robot,SensorBase* sensor);
   std::string name();
   std::string type();
   std::vector<std::string> measurementNames();
   void getMeasurements(std::vector<double>& out);
+  void drawGL();
+  void drawGL(const std::vector<double>& measurements);
 
+  Robot* robot;
   SensorBase* sensor;
 };
 
@@ -83,11 +89,7 @@ class SimRobotController
   SimRobotSensor sensor(int index);
   /// Returns a sensor by name.  If unavailable, a null sensor is returned
   SimRobotSensor sensor(const char* name);
-  ///Old-style: will be deprecated
-  SimRobotSensor getSensor(int index);
-  ///Old-style: will be deprecated
-  SimRobotSensor getNamedSensor(const std::string& name);
-
+  
   /// gets a command list
   std::vector<std::string> commands();
   /// sends a command to the controller
@@ -225,13 +227,11 @@ class Simulator
  public:
   /// Constructs the simulator from a WorldModel.  If the WorldModel was
   /// loaded from an XML file, then the simulation setup is loaded from it.
-  Simulator(const WorldModel& model,const char* settings=NULL);
+  Simulator(const WorldModel& model);
   ~Simulator();
 
   /// Resets to the initial state (same as setState(initialState))
   void reset();
-  /// Old-style: will be deprecated
-  WorldModel getWorld() const;
 
   /// Returns a Base64 string representing the binary data for the current
   /// simulation state, including controller parameters, etc.
@@ -316,16 +316,6 @@ class Simulator
   SimBody body(const RigidObjectModel& object);
   ///Returns the SimBody corresponding to the given terrain
   SimBody body(const TerrainModel& terrain);
-  ///Old-style: will be deprecated
-  SimRobotController getController(int robot);
-  ///Old-style: will be deprecated
-  SimRobotController getController(const RobotModel& robot);
-  ///Old-style: will be deprecated
-  SimBody getBody(const RobotModelLink& link);
-  ///Old-style: will be deprecated
-  SimBody getBody(const RigidObjectModel& object);
-  ///Old-style: will be deprecated
-  SimBody getBody(const TerrainModel& terrain);
 
   /// Returns the joint force and torque local to the link, as would be read
   /// by a force-torque sensor mounted at the given link's origin.  The 6
@@ -336,6 +326,15 @@ class Simulator
   void setGravity(const double g[3]);
   /// Sets the internal simulation substep.  Values < 0.01 are recommended.
   void setSimStep(double dt);
+  /// Retreives some simulation setting.  Valid names are gravity,
+  /// simStep, boundaryLayerCollisions, rigidObjectCollisions, robotSelfCollisions,
+  /// robotRobotCollisions, adaptiveTimeStepping, maxContacts,
+  /// clusterNormalScale, errorReductionParameter, and dampedLeastSquaresParameter
+  std::string getSetting(const std::string& name);
+  /// Sets some simulation setting. Raises an exception if the name is
+  /// unknown or the value is of improper format
+  void setSetting(const std::string& name,const std::string& value);
+
 
   int index;
   WorldModel world;

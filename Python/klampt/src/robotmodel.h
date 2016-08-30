@@ -56,10 +56,10 @@ class RobotModelLink
   int getID();
   ///Returns the name of the robot link
   const char* getName();
+  ///Sets the name of the robot link
+  void setName(const char* name);
   ///Returns a reference to the link's robot.
   RobotModel robot();
-  ///Old-style: will be deprecated
-  RobotModel getRobot();
   ///Returns the index of the link (on its robot).
   int getIndex();
   ///Returns the index of the link's parent (on its robot).
@@ -136,8 +136,6 @@ class RobotModelDriver
   const char* getName();
   ///Returns a reference to the driver's robot.
   RobotModel robot();
-  ///Old-style: will be deprecated
-  RobotModel getRobot();
   ///Currently can be "normal", "affine", "rotation", "translation", or "custom"
   const char* getType();
   ///Returns the single affected link for "normal" links
@@ -182,26 +180,19 @@ class RobotModel
   ///Returns the ID of the robot in its world (Note: not the same as the robot index)
   int getID();
   const char* getName();
+  void setName(const char* name);
   ///Returns the number of links = number of DOF's.
   int numLinks();
   ///Returns a reference to the indexed link
   RobotModelLink link(int index);
   ///Returns a reference to the named link
   RobotModelLink link(const char* name);
-  ///Old-style: will be deprecated.  Returns a reference to the indexed link.
-  RobotModelLink getLink(int index);
-  ///Old-style: will be deprecated.  Returns a reference to the named link.
-  RobotModelLink getLink(const char* name);
   ///Returns the number of drivers.
   int numDrivers();
   ///Returns a reference to the indexed driver.
   RobotModelDriver driver(int index);
   ///Returns a reference to the named driver.
   RobotModelDriver driver(const char* name);
-  ///Old-style: will be deprecated. Returns a reference to the indexed driver.
-  RobotModelDriver getDriver(int index);
-  ///Old-style: will be deprecated. Returns a reference to a RobotModelDriver.
-  RobotModelDriver getDriver(const char* name);
 
   //kinematic and dynamic properties
   void getConfig(std::vector<double>& out);
@@ -257,7 +248,7 @@ class RobotModel
   ///Computes a distance between two configurations, properly taking into account nonstandard joints
   double distance(const std::vector<double>& a,const std::vector<double>& b);
   ///Returns the configuration derivative at a as you interpolate toward b at unit speed.
-  void interpolate_deriv(const std::vector<double>& a,const std::vector<double>& b,std::vector<double>& out);
+  void interpolateDeriv(const std::vector<double>& a,const std::vector<double>& b,std::vector<double>& out);
 
   ///Samples a random configuration and updates the robot's pose.  Properly
   ///handles non-normal joints and handles DOFs with infinite bounds
@@ -293,6 +284,7 @@ class RigidObjectModel
   RigidObjectModel();
   int getID();
   const char* getName();
+  void setName(const char* name);
   Geometry3D geometry();
   Appearance appearance();
   Mass getMass();
@@ -320,6 +312,7 @@ class TerrainModel
   TerrainModel();
   int getID();
   const char* getName();
+  void setName(const char* name);
   Geometry3D geometry();
   Appearance appearance();
   void setFriction(double friction);
