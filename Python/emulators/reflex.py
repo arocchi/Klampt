@@ -1,5 +1,5 @@
 from klampt import *
-from klampt.glrobotprogram import *
+from klampt.vis.glrobotprogram import *
 import numpy as np
 from actuators.CompliantHandEmulator import CompliantHandEmulator
 
@@ -196,7 +196,7 @@ class HandEmulator(CompliantHandEmulator):
         self.q_a_ref = np.array([1.0 - self.sigma_offset[i] - max(min(v, 1), 0) for i, v in enumerate(command) if i < self.a_dofs])
         self.q_d_ref = np.array([max(min(v, 1), 0) for i, v in enumerate(command) if
                         i >= self.a_dofs and i < self.a_dofs + self.d_dofs])
-        print command
+        #print command
 
 
     def getCommand(self):
@@ -254,7 +254,6 @@ class HandSimGLViewer(GLSimulationProgram):
                 b.applyForceAtLocalPoint(se3.apply_rotation(b.getTransform(),50*f),com) # could also use applyWrench with moment=[0,0,0]
             self.control_loop()
             self.sim.simulate(self.control_dt)
-            glutPostRedisplay()
 
     def print_help(self):
         GLSimulationProgram.print_help()
@@ -341,18 +340,17 @@ class HandSimGLViewer(GLSimulationProgram):
                 self.handsim.virtual_wrenches.pop(finger3_l_id)
         else:
             GLSimulationProgram.keyboardfunc(self,c,x,y)
-        glutPostRedisplay()
 
         
 if __name__=='__main__':
     world = WorldModel()
     if len(sys.argv) == 2:
         if not world.readFile(sys.argv[1]):
-            print "Could not load SoftHand hand from", sys.argv[1]
+            print "Could not load Reflex hand from", sys.argv[1]
             exit(1)
     else:
         if not world.readFile(klampt_model_name):
-            print "Could not load SoftHand hand from", klampt_model_name
+            print "Could not load Reflex hand from", klampt_model_name
             exit(1)
     viewer = HandSimGLViewer(world)
     viewer.run()

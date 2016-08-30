@@ -1,6 +1,5 @@
 from klampt import *
-from klampt.glrobotprogram import *
-from klampt.glprogram import *
+from klampt.vis.glrobotprogram import *
 from loaders.soft_hand_loader import SoftHandLoader
 from actuators.CompliantHandEmulator import CompliantHandEmulator
 import numpy as np
@@ -193,7 +192,6 @@ class HandSimGLViewer(GLSimulationProgram):
                 b.applyForceAtLocalPoint(se3.apply_rotation(b.getTransform(),f),p)
             self.control_loop()
             self.sim.simulate(self.control_dt)
-            glutPostRedisplay()
 
     def print_help(self):
         GLSimulationProgram.print_help()
@@ -224,7 +222,6 @@ class HandSimGLViewer(GLSimulationProgram):
                 self.handsim.virtual_wrenches.pop(index_distal_id)
         else:
             GLSimulationProgram.keyboardfunc(self, c, x, y)
-        glutPostRedisplay()
 
 if __name__ == '__main__':
     world = WorldModel()

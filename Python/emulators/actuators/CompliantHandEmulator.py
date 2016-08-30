@@ -1,5 +1,5 @@
-from klampt import vectorops, se3
-from klampt.simulation import ActuatorEmulator
+from klampt.math import vectorops, se3
+from klampt.sim.simulation import ActuatorEmulator
 import numpy as np
 
 class CompliantHandEmulator(ActuatorEmulator):
