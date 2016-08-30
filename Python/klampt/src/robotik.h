@@ -2,7 +2,7 @@
 #define ROBOTIK_H
 
 #include "robotmodel.h"
-#include <robotics/IK.h>
+#include <KrisLibrary/robotics/IK.h>
 
 // Forward declaration of C-type PyObject
 struct _object;
@@ -20,9 +20,9 @@ class IKObjective
 {
  public:
   IKObjective();
-  ///The link that is constrained
+  ///The index of the robot link that is constrained
   int link() const;
-  ///The destination link, or -1 if fixed to the world
+  ///The index of the destination link, or -1 if fixed to the world
   int destLink() const;
   ///Returns the number of position dimensions constrained (0-3)
   int numPosDims() const;
@@ -41,6 +41,24 @@ class IKObjective
   void setRelativePoints(int link1,int link2,PyObject* p1s,PyObject* p2s);
   ///Sets a fixed-transform constraint (R,t) relative to linkTgt
   void setRelativeTransform(int link,int linkTgt,const double R[9],const double t[3]);
+  ///Manual construction
+  void setLinks(int link,int link2=-1);
+  ///Manual: Sets a free position constraint
+  void setFreePosition();
+  ///Manual: Sets a fixed position constraint
+  void setFixedPosConstraint(const double tlocal[3],const double tworld[3]);
+  ///Manual: Sets a planar position constraint
+  ///nworld^T T(link)*tlocal + oworld = 0
+  void setPlanarPosConstraint(const double tlocal[3],const double nworld[3],double oworld);
+  ///Manual: Sets a linear position constraint
+  ///T(link)*tlocal = sworld + u*dworld for some real value u
+  void setLinearPosConstraint(const double tlocal[3],const double sworld[3],const double dworld[3]);
+  ///Manual: Sets a free rotation constraint
+  void setFreeRotConstraint();
+  ///Manual: Sets a fixed rotation constraint
+  void setFixedRotConstraint(const double R[9]);
+  ///Manual: Sets an axial rotation constraint
+  void setAxialRotConstraint(const double alocal[3],const double aworld[3]);
   ///Returns the local and global position of the position constraint
   void getPosition(double out[3],double out2[3]) const;
   ///For linear and planar constraints, returns the direction
@@ -51,6 +69,15 @@ class IKObjective
   void getRotationAxis(double out[3],double out2[3]) const;
   ///For fixed-transform constraints, returns the transform (R,T)
   void getTransform(double out[9],double out2[3]) const;
+
+  ///Loads the objective from a Klamp't-native formatted string. For a
+  ///more readable but verbose format, try the JSON IO routines
+  ///loader.toJson/fromJson()
+  bool loadString(const char* str);
+  ///Saves the objective to a Klamp't-native formatted string.  For a
+  ///more readable but verbose format, try the JSON IO routines
+  ///loader.toJson/fromJson()
+  std::string saveString() const;
 
   IKGoal goal;
 };
@@ -83,6 +110,10 @@ class IKSolver
   void setActiveDofs(const std::vector<int>& active);
   /// Gets the active degrees of freedom
   void getActiveDofs(std::vector<int>& out);
+  /// Sets limits on the robot's configuration.  If empty, this turns off joint limits.
+  void setJointLimits(const std::vector<double>& qmin,const std::vector<double>& qmax);
+  /// Gets the limits on the robot's configuration (by default this is the robot's joint limits
+  void getJointLimits(std::vector<double>& out,std::vector<double>& out2);
 
   /// Returns a vector describing the error of the objective
   void getResidual(std::vector<double>& out);
@@ -101,8 +132,9 @@ class IKSolver
 
   RobotModel robot;
   std::vector<IKObjective> objectives;
-  bool useJointLimits;
   std::vector<int> activeDofs;
+  bool useJointLimits;
+  std::vector<double> qmin,qmax;
 };
 
 

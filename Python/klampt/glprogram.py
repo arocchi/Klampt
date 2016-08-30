@@ -29,16 +29,21 @@ class GLProgram:
           before calling run(), and these are updated when the user resizes
           the window.
         - clearColor: the RGBA floating point values of the background color.
+        - glutInitialized: true if GLUT has been initialized
     """
     def __init__(self,name="OpenGL Program"):
         self.name = name
         self.width = 640
         self.height = 480
         self.clearColor = [1.0,1.0,1.0,0.0]
+        self.glutInitialized = False
+        self.lastx = 0
+        self.lasty = 0
 
     def initWindow(self):
-        """ Open a window and initialize """
-        glutInitDisplayMode (GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH)
+        """ Open a window and initialize. Users should not call this
+        directly! Call run() instead. """
+        glutInitDisplayMode (GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE)
 
         x = 0
         y = 0
@@ -52,31 +57,36 @@ class GLProgram:
         glutKeyboardUpFunc (self.keyboardupfunc)
         glutSpecialFunc (self.specialfunc)
         glutSpecialUpFunc (self.specialupfunc)
-        glutMotionFunc (self.motionfunc)
-        glutPassiveMotionFunc (self.motionfunc)
-        glutMouseFunc (self.mousefunc)
+        glutMotionFunc (self._motionfunc)
+        glutPassiveMotionFunc (self._motionfunc)
+        glutMouseFunc (self._mousefunc)
         glutDisplayFunc (self.displayfunc)
         glutIdleFunc(self.idlefunc)
 
         #init function
         self.initialize()
+        self.glutInitialized = True
 
     def run(self):
         """Starts the main loop"""
         # Initialize Glut
         glutInit ([])
+        if bool(glutSetOption):
+           glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE,GLUT_ACTION_GLUTMAINLOOP_RETURNS)
         self.initWindow()
         glutMainLoop ()
 
     def initialize(self):
         """Called after GLUT is initialized, but before main loop.
-        May be overridden."""
+        May be overridden.  Users should not call this directly!"""
         glutPostRedisplay()
+        glEnable(GL_MULTISAMPLE)
         pass
 
     def refresh(self):
         """Call this to redraw the screen on the next event loop"""
-        glutPostRedisplay()
+        if self.glutInitialized:
+            glutPostRedisplay()
 
     def reshapefunc(self,w,h):
         """Called on window resize.  May be overridden."""
@@ -97,7 +107,8 @@ class GLProgram:
         """Called on special character keypress up up (if your system allows
         it).  May be overridden"""
         pass
-    def motionfunc(self,x,y):
+
+    def motionfunc(self,x,y,dx,dy):
         """Called when the mouse moves on screen.  May be overridden."""
         pass
     def mousefunc(self,button,state,x,y):
@@ -107,6 +118,10 @@ class GLProgram:
     def displayfunc(self):
         """All OpenGL calls go here.  May be overridden, although you
         may wish to override display() and display_screen() instead."""
+        if self.width == 0 or self.height == 0:
+            #hidden?
+            print "GLProgram.displayfunc called on hidden window?"
+            return
         self.prepare_GL()
         self.display()
         self.prepare_screen_GL()
@@ -171,6 +186,45 @@ class GLProgram:
         print "Saving screen to",fn
         im.save(fn)
 
+    def draw_text(self,x,y,text,size=12,color=None):
+        """If called in the display_screen method, renders text at the given x,y position.
+        If size is given, it renders a font in the given size. If color is given, then it
+        is an RGB or RGBA color value."""
+        import ctypes
+        if size <= 10:
+            font = GLUT_BITMAP_HELVETICA_10
+        elif size <= 12:
+            font = GLUT_BITMAP_HELVETICA_12
+        elif size <= 13:
+            font = GLUT_BITMAP_8_BY_13
+        elif size <= 16:
+            font = GLUT_BITMAP_9_BY_15
+        elif size <= 21:
+            font = GLUT_BITMAP_HELVETICA_12
+        else:
+            font = GLUT_TIMES_NEW_ROMAN_24
+        if color is None:
+            glColor3f(0,0,0)
+        elif len(color)==3:
+            glColor3f(color[0],color[1],color[2])
+        else:
+            glColor4f(color[0],color[1],color[2],color[3])
+        glRasterPos2i(x,y)
+        for c in text:
+            glutBitmapCharacter(font, ctypes.c_int( ord(c) ))
+
+    def _motionfunc(self,x,y):
+        """Internal use"""
+        dx = x - self.lastx
+        dy = y - self.lasty
+        self.motionfunc(x,y,dx,dy)
+        self.lastx = x
+        self.lasty = y
+    def _mousefunc(self,button,state,x,y):
+        """Internal use"""
+        self.mousefunc(button,state,x,y)
+        self.lastx = x
+        self.lasty = y
     
 class GLNavigationProgram(GLProgram):
     """A more advanced form of GLProgram that allows you to navigate a
@@ -187,12 +241,10 @@ class GLNavigationProgram(GLProgram):
         self.camera = camera.orbit()
         self.camera.dist = 6.0
         #x field of view in degrees
-        self.fov = 30
+        self.fov = 60
         #near and far clipping planes
         self.clippingplanes = (0.2,20)
         #mouse state information
-        self.lastx = 0
-        self.lasty = 0
         self.modifiers = 0
         self.dragging = False
         self.clearColor = [0.8,0.8,0.9,0]        
@@ -206,8 +258,9 @@ class GLNavigationProgram(GLProgram):
         """Sets the viewport to a tuple previously returned by get_view(),
         e.g. a prior view that was saved to file."""
         self.width,self.height,self.camera,self.fov,self.clippingplanes = v
-        glutReshapeWindow(self.width,self.height)
-        self.refresh()
+        if self.glutInitialized:
+            glutReshapeWindow(self.width,self.height)
+            self.refresh()
 
     def viewport(self):
         """Gets a Viewport instance corresponding to the current view.
@@ -228,7 +281,7 @@ class GLNavigationProgram(GLProgram):
         R,t = se3.inv(self.camera.matrix())
         #from x and y compute ray direction
         u = float(x-self.width/2)/self.width
-        v = float(self.height-y-self.height/2)/self.height
+        v = float(self.height-y-self.height/2)/self.width
         aspect = float(self.width)/float(self.height)
         rfov = self.fov*math.pi/180.0
         scale = 2.0*math.tan(rfov*0.5/aspect)*aspect
@@ -255,7 +308,7 @@ class GLNavigationProgram(GLProgram):
         pack = sum((list(c) for c in cols),[])
         glMultMatrixf(pack)
 
-        # Light source
+        # Default light source
         glLightfv(GL_LIGHT0,GL_POSITION,[0,-1,2,0])
         glLightfv(GL_LIGHT0,GL_DIFFUSE,[1,1,1,1])
         glLightfv(GL_LIGHT0,GL_SPECULAR,[1,1,1,1])
@@ -266,9 +319,7 @@ class GLNavigationProgram(GLProgram):
         glLightfv(GL_LIGHT1,GL_SPECULAR,[0.5,0.5,0.5,1])
         glEnable(GL_LIGHT1)
 
-    def motionfunc(self,x,y):
-        dx = x - self.lastx
-        dy = y - self.lasty
+    def motionfunc(self,x,y,dx,dy):
         if self.dragging:
             if self.modifiers & GLUT_ACTIVE_CTRL:
                 R,t = self.camera.matrix()
@@ -278,9 +329,7 @@ class GLNavigationProgram(GLProgram):
                 self.camera.dist *= math.exp(dy*0.01)
             else:
                 self.camera.rot[2] += float(dx)*0.01
-                self.camera.rot[1] += float(dy)*0.01        
-        self.lastx = x
-        self.lasty = y
+                self.camera.rot[1] += float(dy)*0.01 
         self.refresh()
     
     def mousefunc(self,button,state,x,y):
@@ -289,15 +338,13 @@ class GLNavigationProgram(GLProgram):
         else:
             self.dragging = False
         self.modifiers = glutGetModifiers()
-        self.lastx = x
-        self.lasty = y
 
 
 class GLRealtimeProgram(GLNavigationProgram):
     """A GLNavigationProgram that refreshes the screen at a given frame rate.
 
     Attributes:
-        - ttotal: total elapsed time
+        - ttotal: total elapsed time assuming a constant frame rate
         - fps: the frame rate in Hz
         - dt: 1.0/fps
         - counter: a frame counter
@@ -328,3 +375,73 @@ class GLRealtimeProgram(GLNavigationProgram):
 
     def idle(self):
         pass
+
+class GLPluginProgram(GLRealtimeProgram):
+    """This base class should be used with a GLPluginBase object to handle the
+    GUI functionality (see glcommon.py.  Call setPlugin() on this object to set
+    the currently used plugin.  pushPlugin()/popPlugin() can also be used to
+    set a hierarchy of plugins."""
+    def __init__(self,name="GLWidget"):
+        GLRealtimeProgram.__init__(self,name)
+        self.plugins = []
+    def setPlugin(self,plugin):
+        for p in self.plugins:
+            p.window = None
+        self.plugins = []
+        if plugin:
+            self.pushPlugin(plugin)
+    def pushPlugin(self,plugin):
+        self.plugins.append(plugin)
+        plugin.window = self
+        plugin.reshapefunc(self.width,self.height)
+        self.refresh()
+    def popPlugin(self):
+        if len(self.plugins)==0: return None
+        res = self.plugins[-1]
+        self.plugins.pop(-1)
+        res.window = None
+        return res
+    def initialize(self):
+        for plugin in self.plugins:
+            plugin.initialize()
+        GLRealtimeProgram.initialize(self)
+    def reshapefunc(self,w,h):
+        for plugin in self.plugins[::-1]:
+            if plugin.reshapefunc(w,h): return
+        GLRealtimeProgram.reshapefunc(self,w,h)
+    def keyboardfunc(self,c,x,y):
+        for plugin in self.plugins[::-1]:
+            if plugin.keyboardfunc(c,x,y): return
+        GLRealtimeProgram.keyboardfunc(self,c,x,y)
+    def keyboardupfunc(self,c,x,y):
+        for plugin in self.plugins[::-1]:
+            if plugin.keyboardupfunc(c,x,y): return
+        GLRealtimeProgram.keyboardupfunc(self,c,x,y)
+    def specialfunc(self,c,x,y):
+        for plugin in self.plugins[::-1]:
+            if plugin.specialfunc(c,x,y): return
+        GLRealtimeProgram.specialfunc(self,c,x,y)
+    def specialupfunc(self,c,x,y):
+        for plugin in self.plugins[::-1]:
+            if plugin.specialupfunc(c,x,y): return
+        GLRealtimeProgram.specialupfunc(self,c,x,y)
+    def motionfunc(self,x,y,dx,dy):
+        for plugin in self.plugins[::-1]:
+            if plugin.motionfunc(x,y,dx,dy): return
+        GLRealtimeProgram.motionfunc(self,x,y,dx,dy)
+    def mousefunc(self,button,state,x,y):
+        for plugin in self.plugins[::-1]:
+            if plugin.mousefunc(button,state,x,y): return
+        GLRealtimeProgram.mousefunc(self,button,state,x,y)
+    def idlefunc(self):
+        for plugin in self.plugins:
+            if plugin.idlefunc(): return
+        GLRealtimeProgram.idlefunc(self)
+    def display(self):
+        for plugin in self.plugins:
+            if plugin.display(): return
+        GLRealtimeProgram.display(self)
+    def display_screen(self):
+        for plugin in self.plugins:
+            if plugin.display_screen(): return
+        GLRealtimeProgram.display_screen(self)

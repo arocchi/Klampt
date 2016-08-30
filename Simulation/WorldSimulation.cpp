@@ -1,7 +1,19 @@
 #include "WorldSimulation.h"
-#include <Timer.h>
+#include <KrisLibrary/Timer.h>
 #include <ode/ode.h>
 #include "ODECommon.h"
+
+#define READ_FILE_DEBUG(file,object,prefix)		\
+  if(!ReadFile(file,object)) { \
+    fprintf(stderr,"%s: ReadFile failed to read item %s\n",prefix,#object); \
+    return false; \
+  }
+
+#define READ_ARRAY_FILE_DEBUG(file,object,count,prefix)	\
+  if(!ReadArrayFile(file,object,count)) {					\
+    fprintf(stderr,"%s: ReadArrayFile failed to read item %s, size %d\n",prefix,#object,count); \
+    return false; \
+  }
 
 #define TEST_READ_WRITE 0
 
@@ -87,7 +99,9 @@ void Reset(ContactFeedbackInfo& info)
 {
   info.contactCount = 0;
   info.separationCount = 0;
+  info.penetrationCount = 0;
   info.inContact = false;
+  info.penetrating = false;
   info.meanForce.setZero();
   info.meanTorque.setZero();
   info.meanPoint.setZero();
@@ -109,11 +123,14 @@ template <class T>
 bool ReadFile(File& f,vector<T>& v)
 {
   int n;
-  if(!ReadFile(f,n)) return false;
-  if(n < 0) return false;
+  READ_FILE_DEBUG(f,n,"ReadFile(vector<T>)");
+  if(n < 0) {
+    fprintf(stderr,"ReadFile(vector<T>): invalid size %d\n",n);
+    return false;
+  }
   v.resize(n);
   if(n != 0)
-    if(!ReadArrayFile(f,&v[0],n)) return false;
+    READ_ARRAY_FILE_DEBUG(f,&v[0],n,"ReadFile(vector<T>)")
   return true;
 }
 
@@ -128,9 +145,9 @@ bool WriteFile(File& f,const ContactPoint& cp)
 
 bool ReadFile(File& f,ContactPoint& cp)
 {
-  if(!ReadFile(f,cp.x)) return false;
-  if(!ReadFile(f,cp.n)) return false;
-  if(!ReadFile(f,cp.kFriction)) return false;
+  READ_FILE_DEBUG(f,cp.x,"ReadFile(ContactPoint)");
+  READ_FILE_DEBUG(f,cp.n,"ReadFile(ContactPoint)");
+  READ_FILE_DEBUG(f,cp.kFriction,"ReadFile(ContactPoint)");
   return true;
 }
 
@@ -144,9 +161,9 @@ bool WriteFile(File& f,const ODEObjectID& obj)
 
 bool ReadFile(File& f,ODEObjectID& obj)
 {
-  if(!ReadFile(f,obj.type)) return false;
-  if(!ReadFile(f,obj.index)) return false;
-  if(!ReadFile(f,obj.bodyIndex)) return false;
+  READ_FILE_DEBUG(f,obj.type,"ReadFile(ODEObjectID)");
+  READ_FILE_DEBUG(f,obj.index,"ReadFile(ODEObjectID)");
+  READ_FILE_DEBUG(f,obj.bodyIndex,"ReadFile(ODEObjectID)");
   return true;
 }
 
@@ -162,20 +179,22 @@ bool WriteFile(File& f,const ODEContactList& list)
 
 bool ReadFile(File& f,ODEContactList& list)
 {
-  if(!ReadFile(f,list.o1)) return false;
-  if(!ReadFile(f,list.o2)) return false;
-  if(!ReadFile(f,list.points)) return false;
-  if(!ReadFile(f,list.forces)) return false;
-  if(!ReadFile(f,list.feedbackIndices)) return false;
+  READ_FILE_DEBUG(f,list.o1,"ReadFile(ODEContactList)");
+  READ_FILE_DEBUG(f,list.o2,"ReadFile(ODEContactList)");
+  READ_FILE_DEBUG(f,list.points,"ReadFile(ODEContactList)");
+  READ_FILE_DEBUG(f,list.forces,"ReadFile(ODEContactList)");
+  READ_FILE_DEBUG(f,list.feedbackIndices,"ReadFile(ODEContactList)");
   return true;
 }
 
 bool WriteFile(File& f,const ContactFeedbackInfo& info)
 {
   if(!WriteFile(f,info.accum)) return false;
+  if(!WriteFile(f,info.inContact)) return false;
   if(!WriteFile(f,info.contactCount)) return false;
   if(!WriteFile(f,info.separationCount)) return false;
-  if(!WriteFile(f,info.inContact)) return false;
+  if(!WriteFile(f,info.penetrating)) return false;
+  if(!WriteFile(f,info.penetrationCount)) return false;
   if(!WriteFile(f,info.meanForce)) return false;
   if(!WriteFile(f,info.meanTorque)) return false;
   if(!WriteFile(f,info.meanPoint)) return false;
@@ -187,16 +206,18 @@ bool WriteFile(File& f,const ContactFeedbackInfo& info)
 
 bool ReadFile(File& f,ContactFeedbackInfo& info)
 {
-  if(!ReadFile(f,info.accum)) return false;
-  if(!ReadFile(f,info.contactCount)) return false;
-  if(!ReadFile(f,info.separationCount)) return false;
-  if(!ReadFile(f,info.inContact)) return false;
-  if(!ReadFile(f,info.meanForce)) return false;
-  if(!ReadFile(f,info.meanTorque)) return false;
-  if(!ReadFile(f,info.meanPoint)) return false;
-  if(!ReadFile(f,info.accumFull)) return false;
-  if(!ReadFile(f,info.times)) return false;
-  if(!ReadFile(f,info.contactLists)) return false;
+  READ_FILE_DEBUG(f,info.accum,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.inContact,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.contactCount,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.separationCount,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.penetrating,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.penetrationCount,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.meanForce,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.meanTorque,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.meanPoint,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.accumFull,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.times,"ReadFile(ContactFeedbackInfo)");
+  READ_FILE_DEBUG(f,info.contactLists,"ReadFile(ContactFeedbackInfo)");
   return true;
 }
 
@@ -207,20 +228,21 @@ WorldSimulation::WorldSimulation()
 
 void WorldSimulation::Init(RobotWorld* _world)
 {
+  printf("Creating WorldSimulation\n");
   time = 0;
   world = _world;
   odesim.SetGravity(Vector3(0,0,-9.8));
   for(size_t i=0;i<world->terrains.size();i++)
-    odesim.AddEnvironment(*world->terrains[i].terrain);
+    odesim.AddTerrain(*world->terrains[i]);
   for(size_t i=0;i<world->robots.size();i++)
-    odesim.AddRobot(*world->robots[i].robot);
+    odesim.AddRobot(*world->robots[i]);
   for(size_t i=0;i<world->rigidObjects.size();i++) 
-    odesim.AddObject(*world->rigidObjects[i].object);
+    odesim.AddObject(*world->rigidObjects[i]);
   controlSimulators.resize(world->robots.size());
 
   //setup control simulators
   for(size_t i=0;i<controlSimulators.size();i++) {
-    Robot* robot=world->robots[i].robot;
+    Robot* robot=world->robots[i];
     RobotMotorCommand& command=controlSimulators[i].command;
     controlSimulators[i].Init(robot,odesim.robot(i),(i < robotControllers.size() ? robotControllers[i] : NULL));
 
@@ -254,20 +276,21 @@ void WorldSimulation::Init(RobotWorld* _world)
       command.actuators[j].qdes = robot->GetDriverValue(j);
     }
   }
+  printf("Done.\n");
 }
 
 void WorldSimulation::OnAddModel()
 {
-  for(size_t i=odesim.numEnvs();i<world->terrains.size();i++)
-    odesim.AddEnvironment(*world->terrains[i].terrain);
+  for(size_t i=odesim.numTerrains();i<world->terrains.size();i++)
+    odesim.AddTerrain(*world->terrains[i]);
   for(size_t i=0;i<world->rigidObjects.size();i++) 
-    odesim.AddObject(*world->rigidObjects[i].object);
+    odesim.AddObject(*world->rigidObjects[i]);
   for(size_t i=odesim.numRobots();i<world->robots.size();i++) {
-    odesim.AddRobot(*world->robots[i].robot);
+    odesim.AddRobot(*world->robots[i]);
 
     //set up control simulator
     controlSimulators.resize(i+1);
-    Robot* robot=world->robots[i].robot;
+    Robot* robot=world->robots[i];
     RobotMotorCommand& command=controlSimulators[i].command;
     controlSimulators[i].Init(robot,odesim.robot(i),(i < robotControllers.size() ? robotControllers[i] : NULL));
 
@@ -327,7 +350,7 @@ void WorldSimulation::Advance(Real dt)
   for(ContactFeedbackMap::iterator i=contactFeedback.begin();i!=contactFeedback.end();i++) {
     Reset(i->second);
   }
-  Timer timer;
+  //Timer timer;
   Real timeLeft=dt;
   Real accumTime=0;
   int numSteps = 0;
@@ -335,13 +358,13 @@ void WorldSimulation::Advance(Real dt)
   while(timeLeft > 0.0) {
     Real step = Min(timeLeft,simStep);
     for(size_t i=0;i<controlSimulators.size();i++) 
-      controlSimulators[i].Step(step);
+      controlSimulators[i].Step(step,this);
     for(size_t i=0;i<hooks.size();i++)
       hooks[i]->Step(step);
 
     //update viscous friction approximation as dry friction from current velocity
     for(size_t i=0;i<controlSimulators.size();i++) {
-      Robot* robot=world->robots[i].robot;
+      Robot* robot=world->robots[i];
       for(size_t j=0;j<robot->drivers.size();j++) {
 	//setup viscous friction
 	if(robot->drivers[j].viscousFriction != 0) {
@@ -368,6 +391,8 @@ void WorldSimulation::Advance(Real dt)
 	  if(list->forces.empty()) i->second.separationCount++;
 	  else i->second.contactCount++;
 	  i->second.inContact = !list->forces.empty();
+    i->second.penetrating = list->penetrating;
+    if(list->penetrating) i->second.penetrationCount++;
 	  Vector3 meanPoint(Zero),meanForce(Zero),meanTorque(Zero);
 	  if(!list->forces.empty()) {
 	    Real wsum = 0;
@@ -406,6 +431,20 @@ void WorldSimulation::Advance(Real dt)
   time += dt;
   UpdateModel();
 
+  //kill any autokill hooks at end of timestep
+  bool anyKilled = false;
+  vector<SmartPointer<WorldSimulationHook> > newhooks;
+  for(size_t i=0;i<hooks.size();i++) {
+    if(hooks[i]->autokill) {
+      if(!anyKilled) 
+        newhooks.insert(newhooks.end(),hooks.begin(),hooks.begin()+i);
+      anyKilled = true;
+    }
+    else if(anyKilled) newhooks.push_back(hooks[i]);
+  }
+  if(anyKilled) {
+    swap(hooks,newhooks);
+  }
   /*
   //convert sums to means
   for(ContactFeedbackMap::iterator i=contactFeedback.begin();i!=contactFeedback.end();i++) {
@@ -424,12 +463,27 @@ void WorldSimulation::AdvanceFake(Real dt)
   bool oldFake = fakeSimulation;
   fakeSimulation = true;
   for(size_t i=0;i<controlSimulators.size();i++) 
-    controlSimulators[i].Step(dt);
+    controlSimulators[i].Step(dt,this);
   for(size_t i=0;i<hooks.size();i++)
     hooks[i]->Step(dt);
   time += dt;
   UpdateModel();
   fakeSimulation = oldFake;
+
+  //kill any autokill hooks at end of timestep
+  bool anyKilled = false;
+  vector<SmartPointer<WorldSimulationHook> > newhooks;
+  for(size_t i=0;i<hooks.size();i++) {
+    if(hooks[i]->autokill) {
+      if(!anyKilled) 
+	newhooks.insert(newhooks.end(),hooks.begin(),hooks.begin()+i);
+      else 
+	anyKilled = true;
+    }
+    else if(anyKilled) newhooks.push_back(hooks[i]);
+  }
+  if(anyKilled)
+    swap(hooks,newhooks);
 }
 
 void WorldSimulation::UpdateModel()
@@ -438,18 +492,18 @@ void WorldSimulation::UpdateModel()
     for(size_t i=0;i<world->robots.size();i++) {
       Config q;
       controlSimulators[i].GetCommandedConfig(q);
-      world->robots[i].robot->UpdateConfig(q);
-      world->robots[i].robot->UpdateGeometry();
+      world->robots[i]->UpdateConfig(q);
+      world->robots[i]->UpdateGeometry();
       odesim.robot(i)->SetConfig(q);
     }
   }
   else {
     for(size_t i=0;i<world->robots.size();i++) {
-      odesim.robot(i)->GetConfig(world->robots[i].robot->q);
-      world->robots[i].robot->UpdateFrames();
+      odesim.robot(i)->GetConfig(world->robots[i]->q);
+      world->robots[i]->UpdateFrames();
     }
     for(size_t i=0;i<world->rigidObjects.size();i++) {
-      odesim.object(i)->GetTransform(world->rigidObjects[i].object->T);  
+      odesim.object(i)->GetTransform(world->rigidObjects[i]->T);  
     }
     world->UpdateGeometry();
   }
@@ -460,14 +514,14 @@ void WorldSimulation::UpdateRobot(int i)
   if(fakeSimulation) {
     Config q;
     controlSimulators[i].GetCommandedConfig(q);
-    world->robots[i].robot->UpdateConfig(q);
-    world->robots[i].robot->UpdateGeometry();
+    world->robots[i]->UpdateConfig(q);
+    world->robots[i]->UpdateGeometry();
     odesim.robot(i)->SetConfig(q);
   }
   else {
-    odesim.robot(i)->GetConfig(world->robots[i].robot->q);
-    world->robots[i].robot->UpdateFrames();
-    world->robots[i].robot->UpdateGeometry();
+    odesim.robot(i)->GetConfig(world->robots[i]->q);
+    world->robots[i]->UpdateFrames();
+    world->robots[i]->UpdateGeometry();
   }
 }
 
@@ -481,7 +535,7 @@ bool WorldSimulation::ReadState(File& f)
     TestReadWriteState(*hooks[i],"hook");
 #endif
 
-  if(!ReadFile(f,time)) return false;
+  READ_FILE_DEBUG(f,time,"WorldSimulation::ReadState");
   if(!odesim.ReadState(f)) {
     fprintf(stderr,"WorldSimulation::ReadState: ODE sim failed to read\n");
     return false;
@@ -500,15 +554,27 @@ bool WorldSimulation::ReadState(File& f)
     }
   }
   int n;
-  if(!ReadFile(f,n)) return false;
-  if(n < 0) return false;
+  READ_FILE_DEBUG(f,n,"WorldSimulation::ReadState: reading number of contactFeadback items");
+  if(n < 0) {
+    fprintf(stderr,"Invalid number %d of contactFeedback items\n",n);
+    return false;
+  }
   contactFeedback.clear();
-  for(size_t i=0;i<n;i++) {
+  for(int i=0;i<n;i++) {
     pair<ODEObjectID,ODEObjectID> key;
     ContactFeedbackInfo info;
-    if(!ReadFile(f,key.first)) return false;
-    if(!ReadFile(f,key.second)) return false;
-    if(!ReadFile(f,info)) return false;
+    if(!ReadFile(f,key.first)) {
+      fprintf(stderr,"Unable to read contact feedback %d object 1\n",i);
+      return false;
+    }
+    if(!ReadFile(f,key.second)) {
+      fprintf(stderr,"Unable to read contact feedback %d object 2\n",i);
+      return false;
+    }
+    if(!ReadFile(f,info)) {
+      fprintf(stderr,"Unable to read contact feedback %d info\n",i);
+      return false;
+    }
     contactFeedback[key] = info;
   }
   UpdateModel();
@@ -651,6 +717,31 @@ bool WorldSimulation::HadSeparation(int aid,int bid)
   }
 }
 
+
+bool WorldSimulation::HadPenetration(int aid,int bid)
+{
+  if(aid < 0) {
+    for(ContactFeedbackMap::iterator i=contactFeedback.begin();i!=contactFeedback.end();i++) {
+  if(i->second.penetrationCount>0) return true;
+    }
+    return false;
+  }
+  else if(bid < 0) { 
+    ODEObjectID a=WorldToODEID(aid);
+    for(ContactFeedbackMap::iterator i=contactFeedback.begin();i!=contactFeedback.end();i++) {
+      if(i->first.first == a || i->first.second == a) {
+  if(i->second.penetrationCount>0) return true;
+      }
+    }
+    return false;
+  }
+  else {
+    ContactFeedbackInfo* info=GetContactFeedback(aid,bid);
+    if(!info) return false;
+    return (info->penetrationCount>0);
+  }
+}
+
 Vector3 WorldSimulation::ContactForce(int aid,int bid)
 {
   ODEObjectID a=WorldToODEID(aid);
@@ -701,10 +792,68 @@ Vector3 WorldSimulation::MeanContactForce(int aid,int bid)
   }
   else {
     ContactFeedbackInfo* info=GetContactFeedback(aid,bid);
+    if(!info) return Vector3(0.0);
     if(aid<bid) return info->meanForce;
     else return info->meanForce;
   }
 }
+
+Vector3 WorldSimulation::ContactTorque(int aid,int bid)
+{
+  ODEObjectID a=WorldToODEID(aid);
+  if(bid < 0) {
+    Vector3 sum(Zero);
+    for(ContactFeedbackMap::iterator i=contactFeedback.begin();i!=contactFeedback.end();i++) {
+      ODEContactList* c=NULL;
+      if(i->first.first == a) 
+	c=odesim.GetContactFeedback(a,i->first.second);
+      else if(i->first.second == a)
+	c=odesim.GetContactFeedback(i->first.first,a);
+      if(c) {
+	Vector3 isum(Zero);
+	for(size_t j=0;j<c->forces.size();j++)
+	  isum += cross(c->points[j].x,c->forces[j]);
+	
+	//add to the accumulator
+	if(a == i->first.first) sum+=isum;
+	else sum-=isum;
+      }
+    }
+    return sum;
+  }
+  else {
+    ODEObjectID b=WorldToODEID(bid);
+    ODEContactList* c=odesim.GetContactFeedback(a,b);
+    Vector3 sum(Zero);
+    if(!c) return sum;
+    for(size_t i=0;i<c->forces.size();i++)
+      sum += cross(c->points[i].x,c->forces[i]);
+    if(a<b) return sum;
+    else return -sum;
+  }
+}
+
+Vector3 WorldSimulation::MeanContactTorque(int aid,int bid)
+{
+  ODEObjectID a=WorldToODEID(aid);
+  if(bid < 0) {
+    Vector3 sum(Zero);
+    for(ContactFeedbackMap::iterator i=contactFeedback.begin();i!=contactFeedback.end();i++) {
+      if(a == i->first.first)
+	sum += i->second.meanTorque;
+      else if(a == i->first.second)
+	sum -= i->second.meanTorque;
+    }
+    return sum;
+  }
+  else {
+    ContactFeedbackInfo* info=GetContactFeedback(aid,bid);
+    if(!info) return Vector3(0.0);
+    if(aid<bid) return info->meanTorque;
+    else return info->meanTorque;
+  }
+}
+
 
 
 int WorldSimulation::ODEToWorldID(const ODEObjectID& odeid) const
@@ -762,6 +911,51 @@ bool ForceHook::WriteState(File& f) const
   FatalError("Not implemented yet");
   return false;
 }
+
+
+LocalForceHook::LocalForceHook(dBodyID _body,const Vector3& _localpt,const Vector3& _f)
+  :body(_body),localpt(_localpt),f(_f)
+{}
+
+void LocalForceHook::Step(Real dt)
+{
+  dBodyAddForceAtRelPos(body,f.x,f.y,f.z,localpt.x,localpt.y,localpt.z);
+}
+
+bool LocalForceHook::ReadState(File& f)
+{
+  FatalError("Not implemented yet");
+  return false;
+}
+
+bool LocalForceHook::WriteState(File& f) const
+{
+  FatalError("Not implemented yet");
+  return false;
+}
+
+WrenchHook::WrenchHook(dBodyID _body,const Vector3& _f,const Vector3& _m)
+  :body(_body),f(_f),m(_m)
+{}
+
+void WrenchHook::Step(Real dt)
+{
+  dBodyAddForce(body,f.x,f.y,f.z);
+  dBodyAddTorque(body,m.x,m.y,m.z);
+}
+
+bool WrenchHook::ReadState(File& f)
+{
+  FatalError("Not implemented yet");
+  return false;
+}
+
+bool WrenchHook::WriteState(File& f) const
+{
+  FatalError("Not implemented yet");
+  return false;
+}
+
 
 
 SpringHook::SpringHook(dBodyID _body,const Vector3& _worldpt,const Vector3& _target,Real _k)

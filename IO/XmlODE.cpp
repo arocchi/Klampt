@@ -1,6 +1,7 @@
 #include "XmlODE.h"
 #include "Control/Controller.h"
-#include <utils/stringutils.h>
+#include <KrisLibrary/utils/stringutils.h>
+
 
 XmlODEGeometry::XmlODEGeometry(TiXmlElement* _element)
   :e(_element)
@@ -10,8 +11,17 @@ bool XmlODEGeometry::Get(ODEGeometry& mesh)
 {
   //const char* fn = e->Attribute("file");
   double padding,temp;
+  int preshrink;
   if(e->QueryValueAttribute("padding",&padding)==TIXML_SUCCESS) {
-    mesh.SetPadding(padding);
+    if(e->QueryValueAttribute("preshrink",&preshrink)==TIXML_SUCCESS && preshrink!=0) {
+      if(preshrink == 2)
+	mesh.SetPaddingWithPreshrink(padding,true);
+      else
+	mesh.SetPaddingWithPreshrink(padding,false);
+    }
+    else {
+      mesh.SetPadding(padding);
+    }
   }
   if(e->QueryValueAttribute("kFriction",&temp)==TIXML_SUCCESS) {
     mesh.surf().kFriction=temp;
@@ -54,10 +64,13 @@ bool XmlODESettings::GetSettings(ODESimulator& sim)
     int maxContacts;
     if(c->QueryValueAttribute("maxContacts",&maxContacts)==TIXML_SUCCESS)
       sim.GetSettings().maxContacts = maxContacts;
-    int boundaryLayer,rigidObjectCollisions,robotSelfCollisions,robotRobotCollisions;
+    int boundaryLayer,adaptiveTimeStepping,rigidObjectCollisions,robotSelfCollisions,robotRobotCollisions;
     if(c->QueryValueAttribute("boundaryLayer",&boundaryLayer)==TIXML_SUCCESS) {
-      printf("XML simulator: warning, boundary layer settings don't have an effect\n");
+      printf("XML simulator: warning, boundary layer settings don't have an effect after world is loaded\n");
       sim.GetSettings().boundaryLayerCollisions = boundaryLayer;
+    }
+    if(c->QueryValueAttribute("adaptiveTimeStepping",&adaptiveTimeStepping)==TIXML_SUCCESS) {
+      sim.GetSettings().adaptiveTimeStepping = adaptiveTimeStepping;
     }
     if(c->QueryValueAttribute("rigidObjectCollisions",&rigidObjectCollisions)==TIXML_SUCCESS)
       sim.GetSettings().rigidObjectCollisions = rigidObjectCollisions;
@@ -74,11 +87,11 @@ bool XmlODESettings::GetSettings(ODESimulator& sim)
     if(0 == strcmp(name,"terrain")) {
       int index;
       if(c->QueryValueAttribute("index",&index)==TIXML_SUCCESS) {
-	Assert(index < (int)sim.numEnvs());
+	Assert(index < (int)sim.numTerrains());
 	TiXmlElement* eg=c->FirstChildElement("geometry");
 	if(eg) {
 	  XmlODEGeometry g(eg);
-	  if(!g.Get(*sim.envGeom(index))) {
+	  if(!g.Get(*sim.terrainGeom(index))) {
 	    fprintf(stderr,"Error reading terrain geometry from XML\n");
 	    return false;
 	  }
@@ -197,21 +210,8 @@ bool XmlSimulationSettings::GetSettings(WorldSimulation& sim)
 	fprintf(stderr,"Unable to load controller from xml file\n");
 	return false;
       }
-      Real temp;
-      if(ec->QueryValueAttribute("rate",&temp)==TIXML_SUCCESS){
-	if(!(temp > 0)) {
-	  fprintf(stderr,"Invalid rate %g\n",temp);
-	  continue;
-	}
-	sim.controlSimulators[index].controlTimeStep = 1.0/temp;
-      }
-      if(ec->QueryValueAttribute("timeStep",&temp)==TIXML_SUCCESS){
-	if(!(temp > 0)) {
-	  fprintf(stderr,"Invalid timestep %g\n",temp);
-	  continue;
-	}
-	sim.controlSimulators[index].controlTimeStep = temp;
-      }
+      if(controller->nominalTimeStep > 0)
+	sim.controlSimulators[index].controlTimeStep = controller->nominalTimeStep;
     }
     TiXmlElement*es=c->FirstChildElement("sensors");
     if(es) {

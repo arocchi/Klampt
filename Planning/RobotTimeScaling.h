@@ -1,7 +1,7 @@
 #ifndef ROBOT_TIME_SCALING_H
 #define ROBOT_TIME_SCALING_H
 
-#include <planning/GeneralizedBezierCurve.h>
+#include <KrisLibrary/planning/GeneralizedBezierCurve.h>
 #include "Modeling/Robot.h"
 #include "Modeling/MultiPath.h"
 
@@ -43,7 +43,9 @@ void SmoothDiscretizePath(Robot& robot,const vector<Config>& oldconfigs,int n,ve
  * or the resolution is greater than xtol.
  * 
  * Warning: the space and manifold members of the bezier paths will be bogus
- * pointers.
+ * pointers.  If you need to use them, you will need to set them to appropriate
+ * RobotCSpace and RobotGeodesicManifold objects (see code for
+ * GenerateAndTimeOptimizeMultiPath in RobotTimeScaling.cpp for an example).
  */
 bool InterpolateConstrainedMultiPath(Robot& robot,const MultiPath& path,vector<GeneralizedCubicBezierSpline>& paths,Real xtol=1e-2);
 

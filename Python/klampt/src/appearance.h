@@ -12,6 +12,12 @@
  * OpenGL display lists, so repeated calls are fast.
  *
  * For more complex appearances, you will need to call your own OpenGL calls.
+ *
+ * Appearances can be either references to appearances of objects in the world,
+ * or they can be standalone. 
+ *
+ * Performance note: Avoid  buffer rebuilding (e.g., via refresh()) as 
+ * much as possible.
  */
 class Appearance
 {
@@ -20,10 +26,13 @@ class Appearance
   enum { ALL=0,VERTICES=1,EDGES=2,FACES=3};
 
   Appearance();
+  Appearance(const Appearance& app);
   ~Appearance();
+  const Appearance& operator = (const Appearance& rhs); 
   ///call this to rebuild internal buffers, e.g., when the OpenGL context
-  ///changes
-  void refresh();
+  ///changes. If deep=True, the entire data structure will be revised. Use this
+  ///for streaming data, for example.
+  void refresh(bool deep=true);
   ///Creates a standalone appearance from this appearance
   Appearance clone();
   ///Copies the appearance of the argument into this appearance
@@ -36,7 +45,9 @@ class Appearance
   void setDraw(bool draw);
   ///Turns on/off visibility of the given primitive
   void setDraw(int primitive,bool draw);
+  ///Returns whether this object is visible
   bool getDraw();
+  ///Returns whether this primitive is visible
   bool getDraw(int primitive);
   ///Sets color of the object
   void setColor(float r,float g, float b,float a);
@@ -64,6 +75,8 @@ class Appearance
   ///u2, v2, ..., un, vn.  If uvs is empty, turns off texture mapping
   ///altogether.
   void setTexcoords(const std::vector<double>& uvs);
+  ///For point clouds, sets the point size.
+  void setPointSize(float size);
   ///Draws the currently associated geometry with this appearance.  A geometry
   ///is assocated with this appearance if this appearance comes from an
   ///element of the WorldMode, or if drawGL(geom) was previously called.

@@ -5,6 +5,8 @@
 #include <iostream>
 #include <boost/foreach.hpp>
 
+string toStdString(const QString& s);
+
 ControllerDialog::ControllerDialog(WorldSimulation* _sim,QWidget *parent) :
   QDialog(parent),sim(_sim),world(_sim ? _sim->world : NULL),
     ui(new Ui::ControllerDialog)
@@ -14,7 +16,7 @@ ControllerDialog::ControllerDialog(WorldSimulation* _sim,QWidget *parent) :
    ui->cmb_robot->clear();
    if(world==NULL) return;
    for(size_t i=0;i<world->robots.size();i++){
-     ui->cmb_robot->addItem(QString(world->robots[i].name.c_str()),(int)i);
+     ui->cmb_robot->addItem(QString(world->robots[i]->name.c_str()),(int)i);
    }
    ui->tableWidget->verticalHeader()->setDefaultSectionSize(20); 
    Refresh();
@@ -29,6 +31,7 @@ ControllerDialog::~ControllerDialog()
 void ControllerDialog::OnRobotChange(int robot)
 {
   if(sim==NULL) return;
+  if(sim->robotControllers.empty()) return;
 
   blockSignals(true);
     refreshing=1;
@@ -59,8 +62,8 @@ void ControllerDialog::Refresh(){
 
 void ControllerDialog::OnCellEdited(QTableWidgetItem* item) {
     if(refreshing) return;
-    string key=ui->tableWidget->verticalHeaderItem(item->row())->text().toStdString();
-    settings[key]=item->text().toStdString();
+    string key= toStdString(ui->tableWidget->verticalHeaderItem(item->row())->text());
+    settings[key]= toStdString(item->text());
     int robot = ui->cmb_robot->itemData(ui->cmb_robot->currentIndex()).toInt();
     emit SendControllerSetting(robot,key,settings[key]);    
 }
@@ -69,7 +72,7 @@ void ControllerDialog::OnSendCommand()
 {
   int robot = ui->cmb_robot->itemData(ui->cmb_robot->currentIndex()).toInt();
   if(ui->lineEdit->text().isEmpty()) ui->lineEdit->setFocus();
-  else emit ControllerCommand(robot,ui->comboBox->currentText().toStdString(),ui->lineEdit->text().toStdString());
+  else emit ControllerCommand(robot, toStdString(ui->comboBox->currentText()), toStdString(ui->lineEdit->text()));
 }
 
 

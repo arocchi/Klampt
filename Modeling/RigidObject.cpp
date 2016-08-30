@@ -1,9 +1,13 @@
 #include "RigidObject.h"
+#include <KrisLibrary/Timer.h>
 #include "Mass.h"
-#include "robotics/Inertia.h"
-#include <utils/SimpleFile.h>
-#include <utils/stringutils.h>
-#include <meshing/IO.h>
+#include "IO/ROS.h"
+#include <KrisLibrary/robotics/Inertia.h>
+#include <KrisLibrary/utils/SimpleFile.h>
+#include <KrisLibrary/utils/stringutils.h>
+#include <KrisLibrary/GLdraw/GL.h>
+#include <KrisLibrary/GLdraw/drawextra.h>
+#include <KrisLibrary/meshing/IO.h>
 #include <string.h>
 #include <fstream>
 using namespace Math3D;
@@ -20,16 +24,25 @@ RigidObject::RigidObject()
   kStiffness = kDamping = Inf;
 }
 
+
 bool RigidObject::Load(const char* fn)
 {
   const char* ext=FileExtension(fn);
-  if(!ext) {
-    fprintf(stderr,"Unknown (no) file extension on file %s\n",fn);
-    return false;
-  }
-  if(strcmp(ext,"obj")==0) {
-    SimpleFile f(fn);
-    if(!fn) return false;
+  if(ext && strcmp(ext,"obj")==0) {
+    SimpleFile f;
+    f.AllowItem("mesh");
+    f.AllowItem("geomscale");
+    f.AllowItem("geomtranslate");
+    f.AllowItem("T");
+    f.AllowItem("mass");
+    f.AllowItem("inertia");
+    f.AllowItem("com");
+    f.AllowItem("kFriction");
+    f.AllowItem("kRestitution");
+    f.AllowItem("kStiffness");
+    f.AllowItem("kDamping");
+    f.AllowItem("autoMass");
+    if(!f.Load(fn)) return false;
 
     if(!f.CheckSize("mesh",1,fn)) return false;
     if(!f.CheckType("mesh",PrimitiveValue::String,fn)) return false;
@@ -37,16 +50,12 @@ bool RigidObject::Load(const char* fn)
     string fnPath = GetFilePath(fn);
     geomFile = f["mesh"][0].AsString();
     string geomfn = fnPath + geomFile;
-    if(!geometry.Load(geomfn.c_str())) {
-      fprintf(stderr,"Error loading geometry file %s\n",geomfn.c_str());
+    if(!LoadGeometry(geomfn.c_str()))
       return false;
-    }
-    else {
-      //fprintf(stderr,"Unable to load object %s\n",geomfn.c_str());
-    }
     f.erase("mesh");
 
-    Matrix4 geomT; geomT.setIdentity();
+    Matrix4 ident; ident.setIdentity();
+    Matrix4 geomT=ident; 
     if(f.count("geomscale") != 0) {
       if(!f.CheckType("geomscale",PrimitiveValue::Double,fn)) return false;
       vector<double> scale = f.AsDouble("geomscale");
@@ -71,7 +80,9 @@ bool RigidObject::Load(const char* fn)
       geomT(2,3)=trans[2];
       f.erase("geomtranslate");
     }
-    geometry.Transform(geomT);  
+    if(!(ident == geomT)) {
+      geometry.TransformGeometry(geomT);  
+    }
     if(f.count("T")==0) { T.setIdentity(); }
     else {
       if(!f.CheckType("T",PrimitiveValue::Double,fn)) return false;
@@ -103,10 +114,12 @@ bool RigidObject::Load(const char* fn)
       mass = f["mass"][0].AsDouble();
       f.erase("mass");
     }
+    bool hasCOM = false;
     if(f.count("com")==0) { com.setZero();  }
     else {
       if(!f.CheckSize("com",3)) return false;
       if(!f.CheckType("com",PrimitiveValue::Double)) return false;
+      hasCOM = true;
       com.set(f["com"][0].AsDouble(),f["com"][1].AsDouble(),f["com"][2].AsDouble());
       f.erase("com");
     }
@@ -155,19 +168,23 @@ bool RigidObject::Load(const char* fn)
       f.erase("kDamping");
     }
     if(f.count("autoMass")!=0) {
-      SetMassFromGeometry(mass);
+      if(hasCOM) //com specified, compute inertia about given com
+	inertia = Inertia(*geometry,com,mass);
+      else
+	SetMassFromGeometry(mass);
       f.erase("autoMass");
     }
     if(!f.empty()) {
       for(map<string,vector<PrimitiveValue> >::const_iterator i=f.entries.begin();i!=f.entries.end();i++)
 	fprintf(stderr,"Unknown entry %s in object file %s\n",i->first.c_str(),fn);
     }
-    geometry.InitCollisions();
     return true;
   }
-  else if(Geometry::AnyGeometry3D::CanLoadExt(ext)) {
-    if(!geometry.Load(fn)) return false;
-    geometry.InitCollisions();
+  else {
+    if(!LoadGeometry(fn)) {
+      printf("LoadGeometry %s failed\n",fn);
+      return false;
+    }
     T.setIdentity();
     mass=1.0;
     com.setZero();
@@ -176,13 +193,24 @@ bool RigidObject::Load(const char* fn)
     kRestitution = 0.5;
     kStiffness=Inf;
     kDamping=Inf;
-    fprintf(stderr,"Warning, loading object from .%s file %s.  May have zero inertia.\n",ext,fn);
+    if(ext)
+      fprintf(stderr,"Warning, loading object from .%s file %s.  Setting COM and inertia matrix from geometry.\n",ext,fn);
+    else
+      fprintf(stderr,"Warning, loading object from file %s.  Setting COM and inertia matrix from geometry.\n",fn);
+    SetMassFromGeometry(1.0);
     return true;
   }
-  else {
-    fprintf(stderr,"RigidObject: Unknown file extension %s on file %s\n",ext,fn);
-    return false;
+}
+
+bool RigidObject::LoadGeometry(const char* fn)
+{
+  geomFile = fn;
+  //default appearance options
+  geometry.Appearance()->faceColor.set(0.4,0.2,0.8);
+  if(geometry.Load(geomFile)) {
+    return true;
   }
+  return false;
 }
 
 bool RigidObject::Save(const char* fn)
@@ -197,19 +225,42 @@ bool RigidObject::Save(const char* fn)
 void RigidObject::SetMassFromGeometry(Real totalMass)
 {
   mass = totalMass;
-  com = CenterOfMass(geometry);
-  inertia = Inertia(geometry,com,mass);
+  com = CenterOfMass(*geometry);
+  inertia = Inertia(*geometry,com,mass);
 }
 
 void RigidObject::SetMassFromBB(Real totalMass)
 {
-  AABB3D bb=geometry.GetAABB();
+  AABB3D bb=geometry->GetAABB();
   mass = totalMass;
   com = 0.5*(bb.bmin+bb.bmax);
   BoxInertiaMatrix(bb.bmax.x-bb.bmin.x,bb.bmax.y-bb.bmin.y,bb.bmax.z-bb.bmin.z,mass,inertia);
 }
 
+void RigidObject::InitCollisions()
+{
+  Timer timer;
+  geometry->InitCollisionData();
+  double t = timer.ElapsedTime();
+  if(t > 0.2) 
+    printf("Initialized rigid object %s collision data structures in time %gs\n",geomFile.c_str(),t);
+}
+
 void RigidObject::UpdateGeometry()
 {
-  geometry.SetTransform(T);
+  geometry->SetTransform(T);
+}
+
+void RigidObject::DrawGL()
+{
+  if(!geometry) return;
+
+  glDisable(GL_CULL_FACE);
+  glPushMatrix();
+  GLDraw::glMultMatrix(Matrix4(T));
+
+  geometry.DrawGL();
+
+  glPopMatrix();
+  glEnable(GL_CULL_FACE);
 }

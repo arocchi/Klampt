@@ -1,7 +1,7 @@
 #include "ResourceGUI.h"
 #include "IO/XmlWorld.h"
-#include "utils/stringutils.h"
-#include "utils/ioutils.h"
+#include <KrisLibrary/utils/stringutils.h>
+#include <KrisLibrary/utils/ioutils.h>
 
 ResourceGUIBackend::ResourceGUIBackend(RobotWorld* world,ResourceManager* library)
   :WorldGUIBackend(world),resources(library)
@@ -127,11 +127,7 @@ ResourceNodePtr ResourceGUIBackend::Add(ResourcePtr r)
       }
       r->name = ss.str();
   }
-  //last_added = resources->AddChildOfSelected(r);
-  if(parent == NULL)
-    last_added = resources->Add(r);
-  else
-    last_added = parent->AddChild(r);
+  last_added = resources->Add(r,parent);
   //SendCommand("new_resource", r->Type()+string(" ")+r->name);
   SendCommand("new_resource", last_added->Identifier());
   return last_added;
@@ -249,7 +245,6 @@ bool ResourceGUIBackend::OnCommand(const string& cmd,const string& args)
       fprintf(stderr,"Conversion failed\n");
       return true;
     }
-    res->name = r->name;
     Add(res);     
     SetLastActive();
   }
@@ -292,7 +287,7 @@ void ResourceGUIBackend::RenderCurResource()
     viewResource.DrawGL(current);
   */
   //separate open?
-  viewResource.SetRobot(world->robots[0].robot);
+  viewResource.SetRobot(world->robots[0]);
   if(resources && resources->selected)
     viewResource.DrawGL(resources->selected->resource);
 }

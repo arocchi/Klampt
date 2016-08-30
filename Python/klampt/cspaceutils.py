@@ -2,16 +2,16 @@ import math
 import time
 from cspace import CSpace
 
-def default_sampleneighborhood(self,c,r):
+def default_sampleneighborhood(c,r):
     return [ci + random.uniform(-r,r) for ci in c]
 
-def default_visible(self,a,b):
+def default_visible(a,b):
     raise RuntimeError("Can't check visibility")
 
-def default_distance(self,a,b):
+def default_distance(a,b):
     return math.sqrt(math.pow(ai-bi,2) for (ai,bi) in zip(a,b))
 
-def default_interpolate(self,a,b,u):
+def default_interpolate(a,b,u):
     return [ai+u*(bi-ai) for (ai,bi) in zip(a,b)]
 
 def makedefault(space):
@@ -33,13 +33,13 @@ class CompositeCSpace(CSpace):
         self.spaces = spaces
 
         #construct optional methods
-        def sampleneighborhood(self,c,r):
-            return self.join(s.sampleNeighborhood(cs,r) for (s,cs) in zip(self.spaces,self.split(c)))
-        def visible(self,a,b):
+        def sampleneighborhood(c,r):
+            return self.join(s.sampleneighborhood(cs,r) for (s,cs) in zip(self.spaces,self.split(c)))
+        def visible(a,b):
             return all(s.visible(ai,bi) for (s,ai,bi) in zip(self.spaces,self.split(a),self.split(b)))
-        def distance(self,a,b):
+        def distance(a,b):
             return sum(s.distance(ai,bi) for (s,ai,bi) in zip(self.spaces,self.split(a),self.split(b)))
-        def interpolate(self,a,b,u):
+        def interpolate(a,b,u):
             return self.join(s.interpolate(ai,bi,u) for (s,ai,bi) in zip(self.spaces,self.split(a),self.split(b)))
         
         if any(hasattr(s,'sampleneighborhood') for s in spaces):
@@ -93,12 +93,20 @@ class CompositeCSpace(CSpace):
 
 
 class EmbeddedCSpace(CSpace):
-    """A subspace of an ambient space, with the active DOFs given by the
-    mapping list."""
-    def __init__(self,ambientspace,xinit=None):
+    """A subspace of an ambient space, with the active DOFs given by a list
+    of DOF indices of that ambient space.
+    
+    Attributes:
+    - ambientspace: the ambient configuration space
+    - mapping: the list of active indices into the ambient configuration
+      space
+    - xinit: the initial configuration in the ambient space (by default, 0)
+    """
+    def __init__(self,ambientspace,subset,xinit=None):
+        CSpace.__init__(self)
         self.ambientspace = ambientspace
         n = len(ambientspace.sample())
-        self.mapping = range(n)
+        self.mapping = subset
         #start at the zero config if no initial configuration is given
         if xinit==None:
             self.xinit = [0.0]*n
@@ -106,23 +114,29 @@ class EmbeddedCSpace(CSpace):
             self.xinit = xinit
 
         #construct optional methods
-        def sampleneighborhood(self,c,r):
-            return self.project(self.ambientspace.sampleNeighborhood(self.lift(c),r))
-        def visible(self,a,b):
+        def sampleneighborhood(c,r):
+            return self.project(self.ambientspace.sampleneighborhood(self.lift(c),r))
+        def visible(a,b):
             return self.ambientspace.visible(self.lift(a),self.lift(b))
-        def distance(self,a,b):
+        def distance(a,b):
             return self.ambientspace.distance(self.lift(a),self.lift(b))
-        def interpolate(self,a,b,u):
+        def interpolate(a,b,u):
             return self.project(self.ambientspace.interpolate(self.lift(a)),self.lift(b))
 
         if hasattr(ambientspace,'sampleneighborhood'):
             self.sampleneighborhood = sampleneighborhood
-        if hasattr(s,'visible'):
+        if hasattr(ambientspace,'visible'):
             self.visible = visible
-        if hasattr(s,'distance'):
+        if hasattr(ambientspace,'distance'):
             self.distance = distance
-        if hasattr(s,'interpolate'):
+        if hasattr(ambientspace,'interpolate'):
             self.interpolate = interpolate
+        self.eps = self.ambientspace.eps
+        self.bound = [self.ambientspace.bound[i] for i in self.mapping]
+        self.properties = self.ambientspace.properties
+        if self.ambientspace.feasibilityTests is not None:
+            self.feasibilityTests = [(lambda x:f(self.lift(x))) for f in self.ambientspace.feasibilityTests]
+            self.feasibilityTestNames = [(lambda x:f(self.lift(x))) for f in self.ambientspace.feasibilityTestNames]
 
     def project(self,xamb):
         """Ambient space -> embedded space"""
@@ -130,7 +144,7 @@ class EmbeddedCSpace(CSpace):
 
     def lift(self,xemb):
         """Embedded space -> ambient space"""
-        xamb = xinit[:]
+        xamb = self.xinit[:]
         for (i,j) in enumerate(self.mapping):
             xamb[j] = xemb[i]
         return xamb
@@ -150,8 +164,8 @@ class ZeroTest:
         self.type = 'constant'
         self.dist = lambda(x): 1 if x != 0 else 0
 
-    def __call__(self,obj):
-        return self.dist(obj)
+    def __call__(self,*args):
+        return self.dist(*args)
 
     def setConstant(self,val):
         self.name = str(val)
@@ -202,14 +216,23 @@ class AdaptiveZeroTester:
     """
     def __init__(self):
         self.tests = []
+        self.test_ids = []
 
-    def add_test(self,f):
+    def add_test(self,f,id=None):
+        """Adds an instance of the ZeroTest f to the AdaptiveZeroTester"""
+        if id is None:
+            id = len(self.tests)
         self.tests.append(f)
+        self.test_ids.append(id)
         self.reset_history(self.tests[-1])
 
     def update_order(self):
-        thelist = [(f._sum_cost/f._num_fail,f) for f in self.tests]
-        self.tests = [t for (ec,t) in sorted(thelist)]
+        """Given the empirical costs / failures of testing, returns the optimal
+        order to find the first failure."""
+        thelist = [(f._sum_cost/f._num_fail,id,f) for f,id in zip(self.tests,self.test_ids)]
+        thelist = sorted(thelist)
+        self.tests = [item[2] for item in thelist]
+        self.test_ids = [item[1] for item in thelist]
 
     def testmax(self,*args):
         """Tests all tests, returning the max absolute deviation from 0."""
@@ -299,7 +322,7 @@ class AdaptiveCSpace(CSpace,AdaptiveZeroTester):
     def addFeasibleTest(self,f,name):
         t = ZeroTest()
         t.setCondition(f,name)
-        self.add_test(t)
+        self.add_test(t,name)
 
     def addFeasibleComp(self,f,cmp,val,name):
         t = ZeroTest()
@@ -310,7 +333,7 @@ class AdaptiveCSpace(CSpace,AdaptiveZeroTester):
         return self.test(x)
 
     def stats(self):
-        """Retreives the zero tester stats."""
+        """Retreives the feasibility test stats."""
         res = dict()
         for t in self.tests:
             res[t.name] = AdaptiveZeroTester.stats(self,t)

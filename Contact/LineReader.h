@@ -1,7 +1,8 @@
 #ifndef CONTACT_UTIL_LINE_READER_H
 #define CONTACT_UTIL_LINE_READER_H
 
-#include <utils/SimpleParser.h>
+#include <KrisLibrary/utils/SimpleParser.h>
+#include <string>
 using namespace std;
 
 /** This is a helper class to read text data of the form

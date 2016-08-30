@@ -1,11 +1,13 @@
 #include "RobotTestGUI.h"
-#include <GLdraw/drawMesh.h>
-#include <GLdraw/drawgeometry.h>
+#include <KrisLibrary/GLdraw/drawMesh.h>
+#include <KrisLibrary/GLdraw/drawgeometry.h>
 #include <sstream>
 
+#ifndef GLUT_LEFT_BUTTON
 #define GLUT_LEFT_BUTTON 0
 #define GLUT_MIDDLE_BUTTON 1
 #define GLUT_RIGHT_BUTTON 2
+#endif //GLUT_LEFT_BUTTON
 
 RobotTestBackend::RobotTestBackend(RobotWorld* world)
   :WorldGUIBackend(world)
@@ -15,7 +17,8 @@ RobotTestBackend::RobotTestBackend(RobotWorld* world)
 void RobotTestBackend::Start()
 {
   WorldGUIBackend::Start();
-  robot = world->robots[0].robot;
+  world->InitCollisions();
+  robot = world->robots[0];
   cur_link=0;
   cur_driver=0;
   draw_geom = 1;
@@ -29,12 +32,12 @@ void RobotTestBackend::Start()
 
   robotWidgets.resize(world->robots.size());
   for(size_t i=0;i<world->robots.size();i++) {
-    robotWidgets[i].Set(world->robots[i].robot,&world->robots[i].view);
+    robotWidgets[i].Set(world->robots[i],&world->robotViews[i]);
     robotWidgets[i].linkPoser.highlightColor.set(0.75,0.75,0);
   }
   objectWidgets.resize(world->rigidObjects.size());
   for(size_t i=0;i<world->rigidObjects.size();i++)
-    objectWidgets[i].Set(world->rigidObjects[i].object,&world->rigidObjects[i].view);
+    objectWidgets[i].Set(world->rigidObjects[i]);
   for(size_t i=0;i<world->robots.size();i++)
     allWidgets.widgets.push_back(&robotWidgets[i]);
   for(size_t i=0;i<world->rigidObjects.size();i++)
@@ -50,12 +53,18 @@ void RobotTestBackend::Start()
 void RobotTestBackend::UpdateConfig()
 {
   for(size_t i=0;i<robotWidgets.size();i++)
-    world->robots[i].robot->UpdateConfig(robotWidgets[i].Pose());
+    world->robots[i]->UpdateConfig(robotWidgets[i].Pose());
 
   //update collisions
   for(size_t i=0;i<robot->links.size();i++)
     self_colliding[i]=false;
   robot->UpdateGeometry();
+  //test: built-in self collision testing, which may be faster
+  vector<pair<int,int> > collpairs;
+  robot->SelfCollisions(collpairs);
+  for(size_t i=0;i<collpairs.size();i++)
+    self_colliding[collpairs[i].first] = self_colliding[collpairs[i].second] = true;
+  /*
   for(size_t i=0;i<robot->links.size();i++) {
     for(size_t j=i+1;j<robot->links.size();j++) {
       if(robot->SelfCollision(i,j)) {
@@ -63,20 +72,21 @@ void RobotTestBackend::UpdateConfig()
       }
     }
   }
+  */
   SendCommand("update_config","");
 }
 
 void RobotTestBackend::RenderWorld()
 {
-  ViewRobot& viewRobot = world->robots[0].view;
+  ViewRobot& viewRobot = world->robotViews[0];
   //WorldViewProgram::RenderWorld();
   glDisable(GL_LIGHTING);
   drawCoords(0.1);
   glEnable(GL_LIGHTING);
   for(size_t i=0;i<world->terrains.size();i++)
-    world->terrains[i].view.Draw();
+    world->terrains[i]->DrawGL();
   for(size_t i=0;i<world->rigidObjects.size();i++)
-    world->rigidObjects[i].view.Draw();
+    world->rigidObjects[i]->DrawGL();
 
    
   if(draw_geom) {
@@ -84,7 +94,9 @@ void RobotTestBackend::RenderWorld()
     GLColor highlight(1,1,0);
     GLColor driven(1,0.5,0);
     GLColor colliding(1,0,0);
-    viewRobot.SetGrey();
+    GLColor blue(0,0,1);
+    viewRobot.RestoreAppearance();
+    viewRobot.PushAppearance();
     for(size_t i=0;i<robot->links.size();i++) {
       if(self_colliding[i]) viewRobot.SetColor(i,colliding);
       if((int)i == cur_link)
@@ -95,17 +107,22 @@ void RobotTestBackend::RenderWorld()
       if(draw_self_collision_tests) {
 	//draw a little blue
     	if(robot->selfCollisions(i,cur_link) || robot->selfCollisions(cur_link,i) )  {
-	  viewRobot.linkAppearance[i].faceColor[2] = (1.0+viewRobot.linkAppearance[i].faceColor[2])*0.5;
-	  viewRobot.linkAppearance[i].vertexColor[2] = (1.0+viewRobot.linkAppearance[i].vertexColor[2])*0.5;
+	  GLDraw::GeometryAppearance &app  = viewRobot.Appearance(i);
+    app.ModulateColor(blue,0.5);
 	}
       }
     }
     //this will set the hover colors
     allWidgets.DrawGL(viewport);
-    viewRobot.Draw();
+    //viewRobot.Draw();
+    viewRobot.PopAppearance();
   }
   else {
+    for(size_t i=0;i<robotWidgets.size();i++)
+      robotWidgets[i].linkPoser.draw = 0;
     allWidgets.DrawGL(viewport);
+    for(size_t i=0;i<robotWidgets.size();i++)
+      robotWidgets[i].linkPoser.draw = 1;
   }
   if(draw_com) {
     viewRobot.DrawCenterOfMass();
@@ -140,8 +157,8 @@ void RobotTestBackend::RenderWorld()
   }
   if(draw_bbs) {
     for(size_t j=0;j<robot->geometry.size();j++) {
-      if(robot->geometry[j].Empty()) continue;
-      Box3D bbox = robot->geometry[j].GetBB();
+      if(robot->IsGeometryEmpty(j)) continue;
+      Box3D bbox = robot->geometry[j]->GetBB();
       Matrix4 basis;
       bbox.getBasis(basis);
       glColor3f(1,0,0);
@@ -212,7 +229,7 @@ bool RobotTestBackend::OnButtonToggle(const string& button,int checked)
 bool RobotTestBackend::OnCommand(const string& cmd,const string& args)
 {
   //cout<<"Command: "<<cmd<<", args "<<args<<endl;
-  Robot* robot = world->robots[0].robot;
+  Robot* robot = world->robots[0];
   stringstream ss(args);
   if(cmd=="set_link") {
     ss >> cur_link;
@@ -286,7 +303,6 @@ void RobotTestBackend::DoPassiveMouseMove(int x, int y)
 
 void RobotTestBackend::BeginDrag(int x,int y,int button,int modifiers)
 {  
-  Robot* robot = world->robots[0].robot;
   if(button == GLUT_RIGHT_BUTTON) {
     double d;
     if(allWidgets.BeginDrag(x,viewport.h-y,viewport,d))
@@ -309,7 +325,6 @@ void RobotTestBackend::EndDrag(int x,int y,int button,int modifiers)
 
 void RobotTestBackend::DoFreeDrag(int dx,int dy,int button)
 {
-  Robot* robot = world->robots[0].robot;
   if(button == GLUT_LEFT_BUTTON)  DragRotate(dx,dy);
   else if(button == GLUT_RIGHT_BUTTON) {
     if(allWidgets.hasFocus) {
@@ -325,20 +340,19 @@ void RobotTestBackend::DoFreeDrag(int dx,int dy,int button)
 
 void RobotTestBackend::SetDrawExpanded(int value)
 {
-  ViewRobot& viewRobot = world->robots[0].view;
   draw_expanded = value;
   if(originalDisplayLists.empty()) {
     //first call -- initialize display lists
     originalDisplayLists.resize(robot->links.size());
     expandedDisplayLists.resize(robot->links.size());
     for(size_t j=0;j<robot->links.size();j++) {
-      originalDisplayLists[j]=viewRobot.linkAppearance[j].faceDisplayList;
-      if(!robot->geometry[j].Empty()) {
-	Real p=robot->geometry[j].margin;
+      originalDisplayLists[j]=robot->geomManagers[j].Appearance()->faceDisplayList;
+      if(!robot->IsGeometryEmpty(j)) {
+	Real p=robot->geometry[j]->margin;
 	if(p > 0) {
 	  //draw the expanded mesh
 	  expandedDisplayLists[j].beginCompile();
-	  drawExpanded(robot->geometry[j],p);
+	  drawExpanded(*robot->geometry[j],p);
 	  expandedDisplayLists[j].endCompile();
 	}
 	else
@@ -348,12 +362,12 @@ void RobotTestBackend::SetDrawExpanded(int value)
   }
   if(draw_expanded) {
     for(size_t j=0;j<robot->links.size();j++) {
-      viewRobot.linkAppearance[j].faceDisplayList = expandedDisplayLists[j];
+      robot->geomManagers[j].Appearance()->faceDisplayList = expandedDisplayLists[j];
     }
   }
   else {
     for(size_t j=0;j<robot->links.size();j++) 
-      viewRobot.linkAppearance[j].faceDisplayList = originalDisplayLists[j];
+      robot->geomManagers[j].Appearance()->faceDisplayList = originalDisplayLists[j];
   }
 }
 
@@ -368,7 +382,7 @@ GLUIRobotTestGUI::GLUIRobotTestGUI(GenericBackendBase* backend,RobotWorld* _worl
 bool GLUIRobotTestGUI::Initialize()
 {
   if(!GLUIGUI::Initialize()) return false;
-  robot = world->robots[0].robot;
+  robot = world->robots[0];
   cur_link = 0;
   cur_driver = 0;
 

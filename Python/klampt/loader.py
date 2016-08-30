@@ -18,29 +18,29 @@ import hold
 
 
 def writeVector(q):
-    """Writes a vector to text in the length-prepended format 'n v1 ... vn'"""
+    """Writes a vector to a string in the length-prepended format 'n v1 ... vn'"""
     return str(len(q))+'\t'+' '.join(str(v) for v in q)
 
 def readVector(text):
-    """Reads a length-prepended vector from text 'n v1 ... vn'"""
+    """Reads a length-prepended vector from a string 'n v1 ... vn'"""
     items = text.split()
     if int(items[0])+1 != len(items):
         raise ValueError("Invalid number of items")
     return [float(v) for v in items[1:]]
 
 def writeVectorRaw(x):
-    """Writes a vector to text in the raw format 'v1 ... vn'"""
+    """Writes a vector to a string in the raw format 'v1 ... vn'"""
     return ' '.join(str(xi) for xi in x)
 
 def readVectorRaw(text):
-    """Reads a vector from raw text 'v1 ... vn'"""
+    """Reads a vector from a raw string 'v1 ... vn'"""
     items = text.split()
     return [float(v) for v in items]
 
 
 def writeVectorList(x):
     """Writes a list of vectors to string"""
-    return '\n'.join(loader.writeVector(xi) for xi in x)
+    return '\n'.join(writeVector(xi) for xi in x)
 
 
 def readVectorList(text):
@@ -56,7 +56,7 @@ def readVectorList(text):
 
 
 def writeMatrix(x):
-    """Writes a matrix to text in the format
+    """Writes a matrix to a string in the format
     m n
     x11 x12 ... x1n
     ...
@@ -65,7 +65,7 @@ def writeMatrix(x):
     return '\n'.join([str(len(x))+' '+str(len(x[0]))]+[writeVectorRaw(xi) for xi in x])
 
 def readMatrix(text):
-    """Reads a matrix from text in the format
+    """Reads a matrix from a string in the format
     m n
     x11 x12 ... x1n
     ...
@@ -112,11 +112,11 @@ def readSe3(text):
     return (so3.inv([float(v) for v in items[:9]]),[float(v) for v in items[9:]])
 
 def writeMatrix3(x):
-    """Writes a 3x3 matrix from text"""
+    """Writes a 3x3 matrix to a string"""
     return writeSo3(so3.from_matrix(text))
 
 def readMatrix3(text):
-    """Reads a 3x3 matrix from text"""
+    """Reads a 3x3 matrix from a string"""
     return so3.matrix(readSo3(text))
 
 def writeContactPoint(cp):
@@ -124,18 +124,50 @@ def writeContactPoint(cp):
     return ' '.join(str(v) for v in (cp.x+cp.n+[cp.kFriction]))
 
 def readContactPoint(text):
-    """Reads a contact point from text 'x1 x2 x3 n1 n2 n3 kFriction'"""
+    """Reads a contact point from a string 'x1 x2 x3 n1 n2 n3 kFriction'"""
     items = text.split()
     if len(items)!=7:
         raise ValueError("Invalid number of items, should be 7")
     return ContactPoint([float(v) for v in items[0:3]],[float(v) for v in items[3:6]],float(items[6]))
 
 def writeContactPoint(cp):
-    """Writes a contact point to text 'x1 x2 x3 n1 n2 n3 kFriction'"""
+    """Writes a contact point to a string 'x1 x2 x3 n1 n2 n3 kFriction'"""
     return ' '.join([str(v) for v in cp.x+cp.n+[cp.kFriction]]) 
     
 def readIKObjective(text):
-    """Reads an IKObjective from text"""
+    """Reads an IKObjective from a string in the Klamp't native format
+    
+    'link destLink posConstraintType [pos constraint items] ...
+    rotConstraintType [rot constraint items]'
+    
+    where link and destLink are integers, posConstraintType is one of
+    - N: no constraint
+    - P: position constrained to a plane
+    - L: position constrained to a line
+    - F: position constrained to a point
+    and rotConstraintType is one of
+    - N: no constraint
+    - T: two-axis constraint (not supported)
+    - A: rotation constrained about axis 
+    - F: fixed rotation
+
+    The [pos constraint items] contain a variable number of whitespace-
+    separated items, dependending on posConstraintType:
+    - N: 0 items
+    - P: the local position xl yl zl, world position x y z on the plane, and
+      plane normal nx,ny,nz
+    - L: the local position xl yl zl, world position x y z on the line, and
+      line axis direction nx,ny,nz
+    - F: the local position xl yl zl and world position x y z
+
+    The [rot constraint items] contain a variable number of whitespace-
+    separated items, dependending on rotConstraintType:
+    - N: 0 items
+    - T: not supported
+    - A: the local axis xl yl zl and the world axis x y z
+    - F: the world rotation matrix, in moment (aka exponential map) form
+      mx my mz (see so3.from_moment()
+    """
     items = text.split()
     if len(items) < 4:
         raise ValueError("Not enough items to unpack")
@@ -184,23 +216,37 @@ def readIKObjective(text):
         ind += 3
     else:
         raise ValueError("Invalid rot type "+rotType+", must be N,T,A or F")
-    if posType != 'F':
-        raise NotImplementedError("Python API can only do point and fixed IK goals")
+
+    if posLocal: posLocal = [float(v) for v in posLocal]
+    if posWorld: posWorld = [float(v) for v in posWorld]
+    if posDirection: posDirection = [float(v) for v in posDirection]
+    if rotLocal: rotLocal = [float(v) for v in rotLocal]
+    if rotWorld: rotWorld = [float(v) for v in rotWorld]
+    
     obj = IKObjective()
+    obj.setLinks(link,destLink);
+    if posType=='N':
+        obj.setFreePosConstraint()
+    elif posType=='F':
+        obj.setFixedPosConstraint(posLocal,posWorld)
+    elif posType=='P':
+        obj.setPlanePosConstraint(posLocal,posDirection,vectorops.dot(posDirection,posWorld))
+    else:
+        obj.setLinearPosConstraint(posLocal,posWorld,posDirection)
     if rotType == 'N':
-        #point constraint
-        obj.setRelativePoint(link,destlink,[float(v) for v in posLocal],[float(v) for v in posWorld])
+        obj.setFreeRotConstraint()
     elif rotType == 'F':
         #fixed constraint
-        R = so3.from_moment([float(v) for v in rotWorld])
-        t = vectorops.sub([float(v) for v in posWorld],so3.apply(R,[float(v) for v in posLocal]))
-        obj.setRelativeTransform(link,destlink,R,t)
+        R = so3.from_moment(rotWorld)
+        obj.setFixedRotConstraint(R)
     elif rotType == 'A':
-        #TODO: rotational axis constraints actually can be set in the python API
-        raise NotImplementedError("Axis rotations not yet implemented")
+        obj.setAxialRotConstraint(rotLocal,rotWorld)
     else:
         raise NotImplementedError("Two-axis rotational constraints not supported")
     return obj
+
+def writeIKObjective(obj):
+    return obj.saveString()
 
 def readHold(text):
     """Loads a Hold from a string"""
@@ -262,12 +308,12 @@ def readHold(text):
 def writeHold(h):
     """Writes a Hold to a string"""
     text = "begin hold\n"
-    text += "link = "+str(h.link)+"\n"
-    text += "contacts = ";
+    text += "  link = "+str(h.link)+"\n"
+    text += "  contacts = ";
     text += " \\\n    ".join([writeContactPoint(c) for c in h.contacts])
     text += "\n"
     localPos, worldPos = h.ikConstraint.getPosition()
-    text += "position = "+" ".join(str(v) for v in localPos)+"  \\\n"
+    text += "  position = "+" ".join(str(v) for v in localPos)+"  \\\n"
     text += "    "+" ".join(str(v) for v in worldPos)+"\n"
     #TODO: write ik constraint rotation
     if h.ikConstraint.numRotDims()==3:
@@ -289,6 +335,20 @@ def readGeometricPrimitive(text):
     if not g.loadString(text):
         raise RuntimeError("Error reading GeometricPrimitive from string")
     return g
+
+def readIntArray(text):
+    """Reads a length-prepended vector from a string 'n v1 ... vn'"""
+    items = text.split()
+    if int(items[0])+1 != len(items):
+        raise ValueError("Invalid number of items")
+    return [int(v) for v in items[1:]]
+
+def readStringArray(text):
+    """Reads a length-prepended vector from a string 'n v1 ... vn'"""
+    items = text.split()
+    if int(items[0])+1 != len(items):
+        raise ValueError("Invalid number of items")
+    return items[1:]
 
 def parseLines(text):
     """Returns a list of lines from the given text.  Understands end-of-line escapes '\\n'"""
@@ -322,6 +382,8 @@ readers = {'Config':readVector,
            'IKObjective':readIKObjective,
            'Hold':readHold,
            'GeometricPrimitive':readGeometricPrimitive,
+           'IntArray':readIntArray,
+           'StringArray':readStringArray,
            }
 
 writers = {'Config':writeVector,
@@ -332,8 +394,11 @@ writers = {'Config':writeVector,
            'Matrix3':writeMatrix3,
            'RotationMatrix':writeSo3,
            'RigidTransform':writeSe3,
+           'IKObjective':writeIKObjective,
            'Hold':writeHold,
            'GeometricPrimitive':writeGeometricPrimitive,
+           'IntArray':writeVector,
+           'StringArray':writeVector,
            }
 
 
@@ -371,7 +436,7 @@ loaders = {'Trajectory':loadTrajectory,
            }
 
 savers = {'Trajectory':lambda x,fn:x.save(fn),
-           'MultiPath':lambda x,fn:x.save(fn),
+          'MultiPath':lambda x,fn:x.save(fn),
           'Geometry3D':lambda x,fn:x.saveFile(fn),
           }
 
@@ -418,7 +483,7 @@ def toJson(obj,type='auto'):
                 if len(obj)==2 and len(obj[0])==9 and len(obj[1])==3:
                     type = 'RigidTransform'
                 else:
-                    isconfigs = true
+                    isconfigs = True
                     for item in obj:
                         if not all([isinstance(v,(bool,int,float)) for v in item]):
                             isconfigs = False
@@ -437,7 +502,7 @@ def toJson(obj,type='auto'):
         else:
             raise RuntimeError("Unknown object of type "+obj.__class__.__name)
 
-    if type=='Config' or type=='Configs' or type=='Vector' or type == 'Matrix' or type == 'RotationMatrix' or type == 'Value':
+    if type in ['Config','Configs','Vector','Matrix','Matrix3','RotationMatrix','Value','IntArray','StringArray']:
         return obj
     elif type == 'RigidTransform':
         return obj
@@ -445,6 +510,38 @@ def toJson(obj,type='auto'):
         return {'x':obj.x,'n':obj.n,'kFriction':kFriction}
     elif type == 'Trajectory':
         return {'times':obj.times,'milestones':obj.milestones}
+    elif type == 'IKObjective':
+        res = {'type':type,'link':obj.link()}
+        if obj.destLink() >= 0:
+            res['destLink'] = obj.destLink()
+        if obj.numPosDims()==3:
+            res['posConstraint']='fixed'
+            res['localPosition'],res['endPosition']=obj.getPosition()
+        elif obj.numPosDims()==2:
+            res['posConstraint']='linear'
+            res['localPosition'],res['endPosition']=obj.getPosition()
+            res['direction']=obj.getPositionDirection()
+        elif obj.numPosDims()==1:
+            res['posConstraint']='planar'
+            res['localPosition'],res['endPosition']=obj.getPosition()
+            res['direction']=obj.getPositionDirection()
+        else:
+            #less verbose to just eliminate this 
+            #res['posConstraint']='free'
+            pass
+        if obj.numRotDims()==3:
+            res['rotConstraint']='fixed'
+            res['endRotation']=so3.moment(obj.getRotation())
+        elif obj.numRotDims()==2:
+            res['rotConstraint']='axis'
+            res['localAxis'],res['endRotation']=obj.getRotationAxis()
+        elif obj.numRotDims()==1:
+            raise NotImplementedError("twoaxis constraints are not implemented in Klampt")
+        else:
+            #less verbose to just eliminate this
+            #res['rotConstraint']='free'
+            pass
+        return res
     elif type in writers:
         return {'type':type,'data':write(obj,type)}
     else:
@@ -470,7 +567,7 @@ def fromJson(jsonobj,type='auto'):
         else:
             raise RuntimeError("Unknown JSON object of type "+jsonobj.__class__.__name)
 
-    if type=='Config' or type=='Configs' or type=='Vector' or type == 'Matrix' or type == 'RotationMatrix' or type == 'Value':
+    if type in ['Config','Configs','Vector','Matrix','Matrix3','RotationMatrix','Value','IntArray','StringArray']:
         return jsonobj
     elif type == 'RigidTransform':
         return jsonobj
@@ -497,9 +594,9 @@ def fromJson(jsonobj,type='auto'):
             localPosition = jsonobj['localPosition']
             endPosition = jsonobj['endPosition']
         if rotConstraint != 'free':
-            endRotation = jsonObject['endRotation']
+            endRotation = jsonobj['endRotation']
         if rotConstraint == 'axis' or rotConstraint == 'twoaxis':
-            localAxis = jsonObject['localAxis']
+            localAxis = jsonobj['localAxis']
         if posConstraint == 'free' and rotConstraint == 'free':
             #empty
             return IKObjective()
@@ -528,7 +625,7 @@ def fromJson(jsonobj,type='auto'):
             obj = IKObjective()
             R = so3.from_moment(endRotation)
             t = vectorops.sub(endPosition,so3.apply(R,localPosition))
-            obj.setFixedTransform(R,t)
+            obj.setFixedTransform(link,R,t)
             return obj
         else:
             raise RuntimeError("Invalid IK rotation constraint "+rotConstraint)

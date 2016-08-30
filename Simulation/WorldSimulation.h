@@ -23,6 +23,9 @@ struct ContactFeedbackInfo
   bool inContact; ///< true if contact exists at the end of the outer simulation interval
   Vector3 meanForce,meanTorque,meanPoint;
 
+  bool penetrating;  ///< true if the objects are currently penetrating
+  int penetrationCount;   ///< the number of sub-steps in which the objects were penetrating during the outer simulation interval
+
   //full contact information over sub-steps
   bool accumFull;  //set to true if all ODEContactLists should be stored
   vector<double> times;
@@ -33,16 +36,23 @@ struct ContactFeedbackInfo
  * needs to be a WorldSimulationHook subclass and added to the
  * WorldSimulation.hooks member.
  *
+ * If the flag autokill = true, the hook is removed at the end of the
+ * Advance() call.
+ *
  * @sa ForceHook
+ * @sa LocalForceHook
+ * @sa WrenchHook
  * @sa SpringHook
  */
 class WorldSimulationHook
 {
  public:
+  WorldSimulationHook() : autokill(false) {}
   virtual ~WorldSimulationHook() {}
   virtual void Step(Real dt) {}
   virtual bool ReadState(File& f) { return true; }
   virtual bool WriteState(File& f) const { return true; }
+  bool autokill;
 };
 
 /** @brief A physical simulator for a RobotWorld.
@@ -86,14 +96,23 @@ public:
   bool HadContact(int aid,int bid=-1);
   ///Returns true if the objects had no contact during past Advance call
   bool HadSeparation(int aid,int bid=-1);
+  ///Returns true if the objects had penetration during past Advance call.
+  ///Penetration indicates that there may be simulation artifacts due to poor
+  ///contact handling.  Can also set both aid=bid=-1 to determine whether the
+  ///simulation is generally functioning properly.
+  bool HadPenetration(int aid,int bid=-1);
   ///Returns the ContactFeedback structure for the two objects
   ContactFeedbackInfo* GetContactFeedback(int aid,int bid);
   ///Returns the contact list for the prior time step
   ODEContactList* GetContactList(int aid,int bid);
   ///Returns the resultant contact force (on object a) from the prior time step
   Vector3 ContactForce(int aid,int bid=-1);
+  ///Returns the resultant contact torque (on object a, about its origin) from the prior time step
+  Vector3 ContactTorque(int aid,int bid=-1);
   ///Returns the average contact force (on object a) from the past Advance call
   Vector3 MeanContactForce(int aid,int bid=-1);
+  ///Returns the resultant contact torque (on object a, about its origin) from the past Advance call
+  Vector3 MeanContactTorque(int aid,int bid=-1);
 
   //helpers to convert indexing schemes
   int ODEToWorldID(const ODEObjectID& odeid) const;
@@ -123,6 +142,37 @@ class ForceHook : public WorldSimulationHook
 
   dBodyID body;
   Vector3 worldpt,f;
+};
+
+/** @brief A hook that adds a constant force in world coordinates to a point
+ * on a body given in local coordinates
+ */
+class LocalForceHook : public WorldSimulationHook
+{
+ public:
+  LocalForceHook(dBodyID body,const Vector3& localpt,const Vector3& f);
+  virtual void Step(Real dt);
+  virtual bool ReadState(File& f);
+  virtual bool WriteState(File& f) const;
+
+  dBodyID body;
+  Vector3 localpt,f;
+};
+
+
+/** @brief A hook that adds a constant wrench (force f and moment m) to
+ * the body
+ */
+class WrenchHook : public WorldSimulationHook
+{
+ public:
+  WrenchHook(dBodyID body,const Vector3& f,const Vector3& m);
+  virtual void Step(Real dt);
+  virtual bool ReadState(File& f);
+  virtual bool WriteState(File& f) const;
+
+  dBodyID body;
+  Vector3 f,m;
 };
 
 /** @brief A hook that acts as a Hookean spring to a given fixed target point.

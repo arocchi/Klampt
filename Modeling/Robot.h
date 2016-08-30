@@ -1,7 +1,10 @@
 #ifndef MODELING_ROBOT_H
 #define MODELING_ROBOT_H
 
-#include <robotics/RobotWithGeometry.h>
+#include <KrisLibrary/robotics/RobotWithGeometry.h>
+#include <KrisLibrary/utils/PropertyMap.h>
+#include "ManagedGeometry.h"
+
 using namespace std;
 
 /** @ingroup Modeling 
@@ -40,9 +43,9 @@ struct RobotJointDriver
   Normal: normal 
   Affine: scaling/offset of a single control to multiple outputs
      linkIndices stores the mapping
-  Translation: controls are a direct force applied to the body. 
+  Translation: controls are a direct force applied to the body.  (not implemented yet)
      linkIndices[0] is the "driver" link, linkIndices[1] is the affected link
-  Rotation: controls are a direct moment applied to the body
+  Rotation: controls are a direct moment applied to the body.  (not implemented yet)
      linkIndices[0] is the "driver" link, linkIndices[1] is the affected link
   Custom: in the future will hold more sophisticated mappings
   */
@@ -81,6 +84,7 @@ public:
   bool LoadRob(const char* fn);
   bool LoadURDF(const char* fn);
   bool Save(const char* fn);
+  bool LoadGeometry(int i,const char* file);
   void SetGeomFiles(const char* geomPrefix="",const char* geomExt="tri");  ///< Sets the geometry file names to geomPrefix+[linkName].[geomExt]
   void SetGeomFiles(const vector<string>& geomFiles);
   bool SaveGeometry(const char* prefix="");  
@@ -119,12 +123,19 @@ public:
   ///It is used by exact collision checkers, and is uninitialized by default.
   void ComputeLipschitzMatrix();
 
+  string name;
   vector<string> geomFiles;   ///< geometry file names (used in saving)
+  vector<ManagedGeometry> geomManagers; ///< geometry loaders (speeds up loading)
   Vector accMax;   ///< conservative acceleration limits, used by DynamicPath
   vector<RobotJoint> joints;
   vector<RobotJointDriver> drivers;
   vector<string> linkNames;
   vector<string> driverNames;
+
+  ///Any extra properties that might be useful
+  PropertyMap properties;
+
+  ///A matrix of lipschitz constants (see ComputeLipschitzMatrix)
   Matrix lipschitzMatrix;
 
   ///Set this to true if you want to disable loading of geometry -- saves time

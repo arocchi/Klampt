@@ -4,11 +4,124 @@
 #include "ODERobot.h"
 #include "ODERigidObject.h"
 #include "ODESurface.h"
-#include "Modeling/Environment.h"
+#include "Modeling/Terrain.h"
 #include "Modeling/RigidObject.h"
-#include <robotics/Contact.h>
+#include <KrisLibrary/robotics/Contact.h>
 #include <ode/contact.h>
 #include <map>
+
+struct ODEObjectID;
+struct ODEContactList;
+struct ODEContactResult;
+
+/** @ingroup Simulation
+ * @brief Global simulator settings.
+ */
+struct ODESimulatorSettings
+{
+  ODESimulatorSettings();
+
+  double gravity[3];
+  double defaultEnvPadding;
+  ODESurfaceProperties defaultEnvSurface;
+
+  //collision checking settings
+  bool boundaryLayerCollisions;
+  bool rigidObjectCollisions;
+  bool robotSelfCollisions;
+  bool robotRobotCollisions;
+  bool adaptiveTimeStepping;
+
+  //contact detection settings
+  int maxContacts;
+  double clusterNormalScale;;
+
+  //ODE constants, mostly relevant to tightness of robot constraints
+  double errorReductionParameter;
+  double dampedLeastSquaresParameter;
+};
+
+
+
+/** @ingroup Simulation
+ * @brief An interface to the ODE simulator.
+ * 
+ * Step() performs collision detection, sets up contact response,
+ * calls StepDynamics(), and computes collision feedback.
+ *
+ * StepDynamics() integrates the dynamics without setting up collision
+ * detection structures.  This probably should not be used externally.
+ *
+ * Read/WriteState can be used to serialize state to binary.
+ *
+ * To get contact force information from the simulator, use the
+ * EnableContactFeedback() function to initialize feedback, and then call
+ * GetContactFeedback() to get a pointer to the feedback data structure.
+ * Contact forces are updated after Step().
+ */
+class ODESimulator
+{
+ public:
+  ODESimulator();
+  virtual ~ODESimulator();
+  void SetGravity(const Vector3& g);
+  void SetERP(double erp);   //global error reduction  -- see ODE docs
+  void SetCFM(double erp);   //global constraint force mixing -- see ODE docs
+  ODESimulatorSettings& GetSettings() { return settings; }
+  void AddTerrain(Terrain& terr);
+  void AddRobot(Robot& robot);
+  void AddObject(RigidObject& object);
+  void Step(Real dt);
+  void StepDynamics(Real dt);
+  bool ReadState(File& f);
+  bool WriteState(File& f) const;
+
+  size_t numTerrains() const { return terrains.size(); }
+  size_t numRobots() const { return robots.size(); }
+  size_t numObjects() const { return objects.size(); }
+  inline dWorldID world() const { return worldID; }
+  const Terrain* terrain(int i) const { return terrains[i]; }
+  ODEGeometry* terrainGeom(int i) const { return terrainGeoms[i]; }
+  ODERobot* robot(int i) const { return robots[i]; }
+  ODERigidObject* object(int i) const { return objects[i]; }
+
+  string ObjectName(const ODEObjectID& obj) const;
+  dBodyID ObjectBody(const ODEObjectID& obj) const;
+  dGeomID ObjectGeom(const ODEObjectID& obj) const;
+  void DetectCollisions();
+  void SetupContactResponse(); 
+  void ClearCollisions();
+  void EnableContactFeedback(const ODEObjectID& a,const ODEObjectID& b);
+  ODEContactList* GetContactFeedback(const ODEObjectID& a,const ODEObjectID& b);
+  void GetContactFeedback(const ODEObjectID& a,vector<ODEContactList*>& contacts);
+  void ClearContactFeedback();
+  bool InContact(const ODEObjectID& a) const;
+  bool InContact(const ODEObjectID& a,const ODEObjectID& b) const;
+  void SetupContactResponse(const ODEObjectID& a,const ODEObjectID& b,int feedbackIndex,ODEContactResult& c);
+    
+  //overload this to have custom parameters for surface pairs
+  virtual void GetSurfaceParameters(const ODEObjectID& a,const ODEObjectID& b,dSurfaceParameters& surface) const;
+
+ private:
+  ODESimulatorSettings settings;
+  dWorldID worldID;
+  dSpaceID envSpaceID;
+  vector<ODEGeometry*> terrainGeoms;
+  vector<const Terrain*> terrains;
+  vector<ODERobot*> robots;
+  vector<ODERigidObject*> objects;
+  map<pair<ODEObjectID,ODEObjectID>,ODEContactList> contactList;
+  dJointGroupID contactGroupID;
+  Real timestep;
+  Real simTime;
+
+public:
+  //for adaptive time stepping
+  File lastState;
+  Real lastStateTimestep;
+  map<pair<ODEObjectID,ODEObjectID>,double> lastMarginsRemaining;
+};
+
 
 /** @ingroup Simulation
  * @brief An index that identifies some ODE object in the world.
@@ -56,105 +169,10 @@ struct ODEContactList
   //the contact points
   vector<ContactPoint> points;
   vector<Vector3> forces;
+  //whether the contact detector found excessive penetration
+  bool penetrating;   
 
   vector<int> feedbackIndices;           //internally used
-};
-
-struct ODEContactResult;
-
-/** @ingroup Simulation
- * @brief Global simulator settings.
- */
-struct ODESimulatorSettings
-{
-  ODESimulatorSettings();
-
-  double gravity[3];
-  double defaultEnvPadding;
-  ODESurfaceProperties defaultEnvSurface;
-
-  //collision checking settings
-  bool boundaryLayerCollisions;
-  bool rigidObjectCollisions;
-  bool robotSelfCollisions;
-  bool robotRobotCollisions;
-
-  //contact detection settings
-  int maxContacts;
-  double clusterNormalScale;;
-
-  //ODE constants, mostly relevant to tightness of robot constraints
-  double errorReductionParameter;
-  double dampedLeastSquaresParameter;
-};
-
-
-
-/** @ingroup Simulation
- * @brief An interface to the ODE simulator.
- * 
- * Step() performs collision detection, calls StepDynamics(), and computes
- * collision feedback.
- *
- * StepDynamics() integrates the dynamics without setting up collision
- * detection structures.  This probably should not be used externally.
- *
- * Read/WriteState can be used to serialize state to binary.
- *
- * To get contact force information from the simulator, use the
- * EnableContactFeedback() function to initialize feedback, and then call
- * GetContactFeedback() to get a pointer to the feedback data structure.
- * Contact forces are updated after Step().
- */
-class ODESimulator
-{
- public:
-  ODESimulator();
-  virtual ~ODESimulator();
-  void SetGravity(const Vector3& g);
-  void SetERP(double erp);   //global error reduction  -- see ODE docs
-  void SetCFM(double erp);   //global constraint force mixing -- see ODE docs
-  ODESimulatorSettings& GetSettings() { return settings; }
-  void AddEnvironment(Environment& env);
-  void AddRobot(Robot& robot);
-  void AddObject(RigidObject& object);
-  void Step(Real dt);
-  void StepDynamics(Real dt);
-  bool ReadState(File& f);
-  bool WriteState(File& f) const;
-
-  size_t numEnvs() const { return envs.size(); }
-  size_t numRobots() const { return robots.size(); }
-  size_t numObjects() const { return objects.size(); }
-  inline dWorldID world() const { return worldID; }
-  const Environment* env(int i) const { return envs[i]; }
-  ODEGeometry* envGeom(int i) const { return envGeoms[i]; }
-  ODERobot* robot(int i) const { return robots[i]; }
-  ODERigidObject* object(int i) const { return objects[i]; }
-  
-  void DetectCollisions();
-  void ClearCollisions();
-  void EnableContactFeedback(const ODEObjectID& a,const ODEObjectID& b);
-  ODEContactList* GetContactFeedback(const ODEObjectID& a,const ODEObjectID& b);
-  void GetContactFeedback(const ODEObjectID& a,vector<ODEContactList*>& contacts);
-  bool InContact(const ODEObjectID& a) const;
-  bool InContact(const ODEObjectID& a,const ODEObjectID& b) const;
-  void SetupContactResponse(const ODEObjectID& a,const ODEObjectID& b,int feedbackIndex,ODEContactResult& c);
-    
-  //overload this to have custom parameters for surface pairs
-  virtual void GetSurfaceParameters(const ODEObjectID& a,const ODEObjectID& b,dSurfaceParameters& surface) const;
-
- private:
-  ODESimulatorSettings settings;
-  dWorldID worldID;
-  dSpaceID envSpaceID;
-  vector<ODEGeometry*> envGeoms;
-  vector<const Environment*> envs;
-  vector<ODERobot*> robots;
-  vector<ODERigidObject*> objects;
-  map<pair<ODEObjectID,ODEObjectID>,ODEContactList> contactList;
-  dJointGroupID contactGroupID;
-  Real timestep;
 };
 
 #endif

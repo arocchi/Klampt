@@ -1,18 +1,11 @@
 #include "Resources.h"
-#include <utils/stringutils.h>
-#include <utils/fileutils.h>
+#include <KrisLibrary/utils/stringutils.h>
+#include <KrisLibrary/utils/fileutils.h>
 #include <tinyxml.h>
 #include "IO/XmlWorld.h"
 #include "IO/JSON.h"
 #include <sstream>
 
-template class BasicResource<Config>;
-template class BasicResource<Vector3>;
-template class BasicResource<Matrix3>;
-template class BasicResource<Matrix>;
-template class BasicResource<RigidTransform>;
-template class BasicResource<Hold>;
-template class BasicResource<Meshing::TriMesh>;
 template <> const char* BasicResource<Config>::className = "Config";
 template <> const char* BasicResource<Vector3>::className = "Vector3";
 template <> const char* BasicResource<Matrix3>::className = "Matrix3";
@@ -22,6 +15,13 @@ template <> const char* BasicResource<GeometricPrimitive3D>::className = "Geomet
 template <> const char* BasicResource<Hold>::className = "Hold";
 template <> const char* BasicResource<Meshing::TriMesh>::className = "TriMesh";
 template <> const char* BasicResource<Camera::Viewport>::className = "Viewport";
+template class BasicResource<Config>;
+template class BasicResource<Vector3>;
+template class BasicResource<Matrix3>;
+template class BasicResource<Matrix>;
+template class BasicResource<RigidTransform>;
+template class BasicResource<Hold>;
+template class BasicResource<Meshing::TriMesh>;
 
 
 void MakeRobotResourceLibrary(ResourceLibrary& library)
@@ -286,8 +286,8 @@ bool WorldResource::Extract(const char* subtype,vector<ResourcePtr>& subobjects)
   if(0==strcmp(subtype,"Robot")) {
     for(size_t i=0;i<world.robots.size();i++) {
       RobotResource* rr = new RobotResource;
-      rr->name = world.robots[i].name;
-      rr->robot = *world.robots[i].robot;
+      rr->name = world.robots[i]->name;
+      rr->robot = *world.robots[i];
       subobjects.push_back(rr);
     }
     return true;
@@ -295,8 +295,8 @@ bool WorldResource::Extract(const char* subtype,vector<ResourcePtr>& subobjects)
   else if(0==strcmp(subtype,"RigidObject")) {
     for(size_t i=0;i<world.rigidObjects.size();i++) {
       RigidObjectResource* rr = new RigidObjectResource;
-      rr->name = world.rigidObjects[i].name;
-      rr->object = *world.rigidObjects[i].object;
+      rr->name = world.rigidObjects[i]->name;
+      rr->object = *world.rigidObjects[i];
       subobjects.push_back(rr);
     }
     return true;
@@ -304,9 +304,9 @@ bool WorldResource::Extract(const char* subtype,vector<ResourcePtr>& subobjects)
   else if(0==strcmp(subtype,"ResourceLibrary")) {
     for(size_t i=0;i<world.terrains.size();i++) {
       ResourceLibraryResource* r = new ResourceLibraryResource;
-      r->name = world.terrains[i].name;
-      r->library.Add(MakeResource("geometry",world.terrains[i].terrain->geometry));
-      r->library.Add(MakeResource("kFriction",world.terrains[i].terrain->kFriction));
+      r->name = world.terrains[i]->name;
+      r->library.Add(MakeResource("geometry",*world.terrains[i]->geometry));
+      r->library.Add(MakeResource("kFriction",world.terrains[i]->kFriction));
       subobjects.push_back(r);
     }
     return true;
@@ -324,21 +324,21 @@ bool WorldResource::Unpack(vector<ResourcePtr>& subobjects,bool* incomplete)
   subobjects.resize(0);
   for(size_t i=0;i<world.robots.size();i++) {
     RobotResource* rr = new RobotResource;
-    rr->name = world.robots[i].name;
-    rr->robot = *world.robots[i].robot;
+    rr->name = world.robots[i]->name;
+    rr->robot = *world.robots[i];
     subobjects.push_back(rr);
   }
   for(size_t i=0;i<world.rigidObjects.size();i++) {
     RigidObjectResource* rr = new RigidObjectResource;
-    rr->name = world.rigidObjects[i].name;
-    rr->object = *world.rigidObjects[i].object;
+    rr->name = world.rigidObjects[i]->name;
+    rr->object = *world.rigidObjects[i];
     subobjects.push_back(rr);
   }
   for(size_t i=0;i<world.terrains.size();i++) {
     ResourceLibraryResource* r = new ResourceLibraryResource;
-    r->name = world.terrains[i].name;
-    r->library.Add(MakeResource("geometry",world.terrains[i].terrain->geometry));
-    r->library.Add(MakeResource("kFriction",world.terrains[i].terrain->kFriction));
+    r->name = world.terrains[i]->name;
+    r->library.Add(MakeResource("geometry",*world.terrains[i]->geometry));
+    r->library.Add(MakeResource("kFriction",world.terrains[i]->kFriction));
     subobjects.push_back(r);
   }
   if(incomplete) *incomplete = true;
@@ -877,13 +877,13 @@ StanceResource::StanceResource(const Stance& val)
 bool StanceResource::Load(istream& in)
 {
   in>>stance;
-  return (in);
+  return bool(in);
 }
 
 bool StanceResource::Save(ostream& out)
 {
   out<<stance;
-  return (out);
+  return bool(out);
 }
 
 bool StanceResource::Load(TiXmlElement* in)
@@ -1443,17 +1443,17 @@ void Convert(const IKGoal& g,AnyCollection& c)
   case IKGoal::RotNone:
     break;
   case IKGoal::RotTwoAxis:
-    c["posConstraint"] = string("twoaxis");
+    c["rotConstraint"] = string("twoaxis");
     Convert(g.localAxis,c["localAxis"]);
     Convert(g.endRotation,c["endRotation"]);
     break;
   case IKGoal::RotAxis:
-    c["posConstraint"] = string("axis");
+    c["rotConstraint"] = string("axis");
     Convert(g.localAxis,c["localAxis"]);
     Convert(g.endRotation,c["endRotation"]);
     break;
   case IKGoal::RotFixed:
-    c["posConstraint"] = string("fixed");
+    c["rotConstraint"] = string("fixed");
     Convert(g.endRotation,c["endRotation"]);
     break;
   }

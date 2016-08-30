@@ -1,7 +1,7 @@
 #include "Interface/UserInterface.h"
 #include "Interface/RobotInterface.h"
 #include "Main/SimViewProgram.h"
-#include <utils/StatCollector.h>
+#include <KrisLibrary/utils/StatCollector.h>
 #include <GL/glui.h>
 #include <fstream>
 using namespace Math3D;
@@ -102,6 +102,7 @@ public:
 
     robotInterface = new DefaultMotionQueueInterface(GetMotionQueue(sim.robotControllers[0]));
     CopyWorld(*world,planningWorld);
+    planningWorld.InitCollisions();
 
     ///Hack to initialize motion queue before the planner tries to get a hold of it
     sim.robotControllers[0]->Update(0); 
@@ -152,26 +153,30 @@ public:
 
   virtual void RenderWorld()
   {
-    Robot* robot=world->robots[0].robot;
+    Robot* robot=world->robots[0];
     RobotController* rc=sim.robotControllers[0];
 
     SimViewProgram::RenderWorld();
 
     //draw current commanded configuration -- transparent
     GLColor newColor(0,1,0,0.5);
-    world->robots[0].view.SetColors(newColor);
+    world->robotViews[0].PushAppearance();
+    world->robotViews[0].SetColors(newColor);
     Config q;
     sim.controlSimulators[0].GetCommandedConfig(q);
     robot->UpdateConfig(q);
-    world->robots[0].view.Draw();
+    world->robotViews[0].Draw();
+    world->robotViews[0].PopAppearance();
 
     if(drawDesired) {
       Config curBest;
       robotInterface->GetEndConfig(curBest);
       if(!curBest.empty()) {
 	robot->UpdateConfig(curBest); 
-	world->robots[0].view.SetColors(GLColor(1,1,0,0.5));
-	world->robots[0].view.Draw();
+	world->robotViews[0].PushAppearance();
+	world->robotViews[0].SetColors(GLColor(1,1,0,0.5));
+	world->robotViews[0].Draw();
+	world->robotViews[0].PopAppearance();
       }
       /*
       if(curGoal) {

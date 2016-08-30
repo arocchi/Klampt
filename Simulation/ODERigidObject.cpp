@@ -3,7 +3,8 @@
 #include "ODECustomGeometry.h"
 #include "Settings.h"
 #include <ode/ode.h>
-#include <errors.h>
+#include <KrisLibrary/errors.h>
+#include <iostream>
 
 double ODERigidObject::defaultPadding = gDefaultRigidObjectPadding;
 ODESurfaceProperties ODERigidObject::defaultSurface = {0.1,0.5,Inf,Inf};
@@ -37,7 +38,7 @@ void ODERigidObject::Create(dWorldID worldID,dSpaceID space,bool useBoundaryLaye
   dBodySetMass(bodyID,&mass);
   
   geometry = new ODEGeometry;
-  geometry->Create(&obj.geometry,spaceID,-obj.com,useBoundaryLayer);
+  geometry->Create(&*obj.geometry,spaceID,-obj.com,useBoundaryLayer);
   dGeomSetBody(geometry->geom(),bodyID);
   dGeomSetData(geometry->geom(),(void*)-1);
   geometry->SetPadding(defaultPadding);
@@ -92,13 +93,19 @@ bool ODERigidObject::ReadState(File& f)
   Vector3 w,v;
   dReal pos[3];
   dReal q[4];
+  dReal frc[3];
+  dReal trq[3];
   if(!ReadArrayFile(f,pos,3)) return false;
   if(!ReadArrayFile(f,q,4)) return false;
   if(!ReadFile(f,w)) return false;
   if(!ReadFile(f,v)) return false;
+  if(!ReadArrayFile(f,frc,3)) return false;
+  if(!ReadArrayFile(f,trq,3)) return false;
 
   dBodySetPosition(bodyID,pos[0],pos[1],pos[2]);
   dBodySetQuaternion(bodyID,q);
+  dBodySetForce(bodyID,frc[0],frc[1],frc[2]);
+  dBodySetTorque(bodyID,trq[0],trq[1],trq[2]);
   SetVelocity(w,v);
   return true;
 }
@@ -110,10 +117,15 @@ bool ODERigidObject::WriteState(File& f) const
   const dReal* pos=dBodyGetPosition(bodyID);
   const dReal* q=dBodyGetQuaternion(bodyID);
   GetVelocity(w,v);
+  //do we need this?
+  const dReal* frc=dBodyGetForce(bodyID);
+  const dReal* trq=dBodyGetTorque(bodyID);
     
   if(!WriteArrayFile(f,pos,3)) return false;
   if(!WriteArrayFile(f,q,4)) return false;
   if(!WriteFile(f,w)) return false;
   if(!WriteFile(f,v)) return false;
+  if(!WriteArrayFile(f,frc,3)) return false;
+  if(!WriteArrayFile(f,trq,3)) return false;
   return true;
 }

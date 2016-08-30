@@ -4,13 +4,17 @@ PROJECT( Klampt )
 # version (e.g. for packaging)
 set(KLAMPT_MAJOR_VERSION 0)
 set(KLAMPT_MINOR_VERSION 6)
-set(KLAMPT_PATCH_VERSION 1)
+set(KLAMPT_PATCH_VERSION 2)
 set(KLAMPT_VERSION ${KLAMPT_MAJOR_VERSION}.${KLAMPT_MINOR_VERSION}.${KLAMPT_PATCH_VERSION})
 if(COMMAND cmake_policy)
   cmake_policy(SET CMP0003 NEW)
 endif(COMMAND cmake_policy)
 
 SET (CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/CMakeModules")
+
+IF(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  SET (GLUI_INCLUDE_DIR "/usr/local/include")
+ENDIF(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
 # COMPILER SETTINGS (default: Release) and flags
 INCLUDE(CompilerSettings)
@@ -105,7 +109,6 @@ configure_file(
 add_custom_target(uninstall
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 
-
 #install targets
 install(TARGETS Klampt
   ARCHIVE
@@ -128,6 +131,10 @@ IF(WIN32)
 	install(FILES Library/Assimp32.dll Library/glpk_4_52.dll Library/glut32.dll
 		DESTINATION bin
 		COMPONENT apps)
+ELSE(WIN32)
+	#install to /opt/klampt-X.Y
+    SET(CMAKE_INSTALL_PREFIX "/opt/klampt-${KLAMPT_MAJOR_VERSION}.${KLAMPT_MINOR_VERSION}.${KLAMPT_PATCH_VERSION}" CACHE INTERNAL "Prefix prepended to install directories" FORCE)
+
 ENDIF(WIN32)
 
 #python demos
@@ -143,6 +150,11 @@ install(DIRECTORY Python/control
 install(DIRECTORY Python/utils
     DESTINATION Python
     COMPONENT pythonexamples)
+
+
+IF(PYTHON)
+  install(CODE "execute_process(COMMAND \"cd Python; ${PYTHON} setup.py install\")" COMPONENT python)
+ENDIF(PYTHON)
 
 
 # Needs to be last statement:

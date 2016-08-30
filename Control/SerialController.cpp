@@ -1,6 +1,6 @@
 #include "SerialController.h"
-#include <utils/threadutils.h>
-#include <utils/AnyCollection.h>
+#include <KrisLibrary/utils/threadutils.h>
+#include <KrisLibrary/utils/AnyCollection.h>
 #include <signal.h>
 
 SerialController::SerialController(Robot& robot,const string& _servAddr,Real _writeRate)
@@ -75,11 +75,11 @@ void SerialController::Update(Real dt)
     stringstream ss;
     ss << sensorData;
     if(controllerPipe && controllerPipe->transport->WriteReady()) {
-      controllerPipe->SendMessage(ss.str());
+      controllerPipe->Send(ss.str());
     }
   }
-  if(controllerPipe && controllerPipe->NewMessageCount() > 0) {
-    string scmd = controllerPipe->NewestMessage();
+  if(controllerPipe && controllerPipe->UnreadCount() > 0) {
+    string scmd = controllerPipe->Newest();
     if(scmd.empty()) return;
     AnyCollection cmd;
     if(!cmd.read(scmd.c_str())) {

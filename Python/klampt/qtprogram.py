@@ -37,8 +37,9 @@ def toGlutModifiers(modifiers):
     return res
 
 class GLProgram(QGLWidget):
-    """A basic OpenGL program using GLUT.  Set up your window parameters,
-    then call run() to start the GLUT main loop.
+    """A basic OpenGL program using Qt.  Set up your window parameters,
+    then call run() to start the Qt main loop.  This function can also be
+    passed a main window / application as a parent.
 
     Attributes:
         - name: title of the window (only has an effect before calling
@@ -49,6 +50,7 @@ class GLProgram(QGLWidget):
         - clearColor: the RGBA floating point values of the background color.
     """
     def __init__(self,name="OpenGL Program"):
+        QGLWidget.__init__(self)
         self.name = name
         self.width = 640
         self.height = 480
@@ -57,10 +59,15 @@ class GLProgram(QGLWidget):
         self.modifiers = 0
         #mouse state information
         self.lastx,self.lasty = None,None
+        self.initialized = False
+        self.refreshed = False
 
-    def initWindow(self,parent=None):
+    def initWindow(self,parent=None,shared=None):
         """ Open a window and initialize """
-        QGLWidget.__init__(self,parent)
+        if self.initialized:
+            raw_input("initWindow called twice... this may invalidate textures and display lists... are you sure you want to continue?")
+        QGLWidget.__init__(self,parent,shared)
+        self.setFocusPolicy(Qt.StrongFocus)
         self.setWindowTitle(self.name)
         self.idleTimer = QTimer()
         self.idleTimer.timeout.connect(lambda:self.idlefunc())
@@ -75,6 +82,10 @@ class GLProgram(QGLWidget):
         self.setMouseTracking(True)
         #init function
         self.initialize()
+        self.initialized = True
+
+    def sizeHint(self):
+        return QSize(self.width,self.height)
 
     def run(self,parent=None):
         """Starts the main loop"""
@@ -95,12 +106,20 @@ class GLProgram(QGLWidget):
         self.idleTimer.stop()
 
     def refresh(self):
-        QTimer.singleShot(0,lambda:self.updateGL());
+        if not self.refreshed:
+            self.refreshed = False
+            #TODO: resolve whether it's better to call updateGL here or to schedule
+            # a timer event
+            self.updateGL()
+            #QTimer.singleShot(0,lambda:self.updateGL());
 
     #QtGLWidget bindings
     def initializeGL(self): return self.initialize()
     def resizeGL(self,w,h): return self.reshapefunc(w,h)
-    def paintGL(self) : return self.displayfunc()
+    def paintGL(self) :
+        self.refreshed = False
+        res = self.displayfunc()
+        return res
     #QWidget bindings
     def mouseMoveEvent(self,e):
         x,y = e.pos().x(),e.pos().y()
@@ -120,7 +139,7 @@ class GLProgram(QGLWidget):
         self.lastx,self.lasty = x,y
         return self.mousefunc(toGlutButton(e.button()),GLUT_UP,x,y)
     def keyPressEvent(self,e):
-        c = e.text()
+        c = str(e.text())
         if len(c)==0: return #some empty press, like shift/control
         return self.keyboardfunc(c,self.lastx,self.lasty)
     def keyReleaseEvent(self,e):
@@ -149,7 +168,7 @@ class GLProgram(QGLWidget):
         """Called on special character keypress down.  May be overridden"""
         pass
     def specialupfunc(self,c,x,y):
-        """Called on special character keypress up up (if your system allows
+        """Called on special character keypress up (if your system allows
         it).  May be overridden"""
         pass
     def motionfunc(self,x,y,dx,dy):
@@ -241,7 +260,7 @@ class GLNavigationProgram(GLProgram):
         self.camera = camera.orbit()
         self.camera.dist = 6.0
         #x field of view in degrees
-        self.fov = 30
+        self.fov = 60
         #near and far clipping planes
         self.clippingplanes = (0.2,20)
         #mouse state information
@@ -327,7 +346,7 @@ class GLNavigationProgram(GLProgram):
                 self.camera.dist *= math.exp(dy*0.01)
             else:
                 self.camera.rot[2] += float(dx)*0.01
-                self.camera.rot[1] += float(dy)*0.01        
+                self.camera.rot[1] += float(dy)*0.01
         self.refresh()
     
     def mousefunc(self,button,state,x,y):
@@ -374,4 +393,72 @@ class GLRealtimeProgram(GLNavigationProgram):
         pass
 
 
-
+class GLPluginProgram(GLRealtimeProgram):
+    """This base class should be used with a GLPluginBase object to handle the
+    GUI functionality (see glcommon.py.  Call setPlugin() on this object to set
+    the currently used plugin.  pushPlugin()/popPlugin() can also be used to
+    set a hierarchy of plugins."""
+    def __init__(self,name="GLWidget"):
+        GLRealtimeProgram.__init__(self,name)
+        self.plugins = []
+    def setPlugin(self,plugin):
+        for p in self.plugins:
+            p.window = None
+        self.plugins = []
+        if plugin:
+            self.pushPlugin(plugin)
+    def pushPlugin(self,plugin):
+        self.plugins.append(plugin)
+        plugin.window = self
+        plugin.reshapefunc(self.width,self.height)
+        self.refresh()
+    def popPlugin(self):
+        if len(self.plugins)==0: return None
+        res = self.plugins[-1]
+        self.plugins.pop(-1)
+        res.window = None
+        return res
+    def initialize(self):
+        for plugin in self.plugins:
+            plugin.initialize()
+        GLRealtimeProgram.initialize(self)
+    def reshapefunc(self,w,h):
+        for plugin in self.plugins[::-1]:
+            if plugin.reshapefunc(w,h): return
+        GLRealtimeProgram.reshapefunc(self,w,h)
+    def keyboardfunc(self,c,x,y):
+        for plugin in self.plugins[::-1]:
+            if plugin.keyboardfunc(c,x,y): return
+        GLRealtimeProgram.keyboardfunc(self,c,x,y)
+    def keyboardupfunc(self,c,x,y):
+        for plugin in self.plugins[::-1]:
+            if plugin.keyboardupfunc(c,x,y): return
+        GLRealtimeProgram.keyboardupfunc(self,c,x,y)
+    def specialfunc(self,c,x,y):
+        for plugin in self.plugins[::-1]:
+            if plugin.specialfunc(c,x,y): return
+        GLRealtimeProgram.specialfunc(self,c,x,y)
+    def specialupfunc(self,c,x,y):
+        for plugin in self.plugins[::-1]:
+            if plugin.specialupfunc(c,x,y): return
+        GLRealtimeProgram.specialupfunc(self,c,x,y)
+    def motionfunc(self,x,y,dx,dy):
+        for plugin in self.plugins[::-1]:
+            if plugin.motionfunc(x,y,dx,dy): return
+        GLRealtimeProgram.motionfunc(self,x,y,dx,dy)
+    def mousefunc(self,button,state,x,y):
+        for plugin in self.plugins[::-1]:
+            if plugin.mousefunc(button,state,x,y): return
+        GLRealtimeProgram.mousefunc(self,button,state,x,y)
+    def idlefunc(self):
+        for plugin in self.plugins:
+            if plugin.idlefunc(): return
+        GLRealtimeProgram.idlefunc(self)
+    def display(self):
+        for plugin in self.plugins:
+            if plugin.display(): return
+        GLRealtimeProgram.display(self)
+    def display_screen(self):
+        for plugin in self.plugins:
+            if plugin.display_screen(): return
+        GLRealtimeProgram.display_screen(self)

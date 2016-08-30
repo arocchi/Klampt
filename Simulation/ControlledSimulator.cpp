@@ -1,4 +1,5 @@
 #include "ControlledSimulator.h"
+#include "Control/JointSensors.h"
 
 //Set these values to 0 to get all warnings
 
@@ -28,17 +29,9 @@ void ControlledRobotSimulator::Init(Robot* _robot,ODERobot* _oderobot,RobotContr
   }
   curTime = 0;
   nextControlTime = 0;
+  nextSenseTime.resize(0);
 }
 
-void ControlledRobotSimulator::SimulateSensors()
-{
-  if(!controller) return;
-
-  for(size_t i=0;i<sensors.sensors.size();i++) {
-    sensors.sensors[i]->Simulate(this);
-    sensors.sensors[i]->Advance(controlTimeStep);
-  }
-}
 
 void ControlledRobotSimulator::GetCommandedConfig(Config& q)
 {
@@ -94,8 +87,35 @@ void ControlledRobotSimulator::GetSimulatedVelocity(Config& dq)
   oderobot->GetVelocities(dq);
 }
 
+void ControlledRobotSimulator::GetLinkTorques(Vector& t) const
+{
+  Vector tact(robot->drivers.size());
+  t.resize(robot->links.size());
+  GetActuatorTorques(tact);
+  for(size_t i=0;i<robot->drivers.size();i++)
+    switch(robot->drivers[i].type) {
+      case RobotJointDriver::Affine:
+      {
+        for (size_t j=0;j<robot->drivers[i].linkIndices.size();j++)
+          t[robot->drivers[i].linkIndices[j]] = tact[i]*robot->drivers[i].affScaling[j];
+        break;
+      }
+      default:
+      {
+        for (size_t j=0;j<robot->drivers[i].linkIndices.size();j++)
+          t[robot->drivers[i].linkIndices[j]] = tact[i];
+      }
+    }
+}
+
 void ControlledRobotSimulator::GetActuatorTorques(Vector& t) const
 {
+  if(t.empty()) t.resize(robot->drivers.size());
+  if(t.n != (int)robot->drivers.size()) {
+    fprintf(stderr,"ControlledRobotSimulator::GetActuatorTorques: Warning, vector isn't sized to the number of drivers %d (got %d)\n",robot->drivers.size(),t.n);
+    if(t.n == (int)robot->links.size())
+      fprintf(stderr,"  (Did you mean GetLinkTorques()?\n");
+  }
   Assert(command.actuators.size() == robot->drivers.size());
   t.resize(command.actuators.size());
   for(size_t i=0;i<command.actuators.size();i++) {
@@ -150,15 +170,41 @@ void ControlledRobotSimulator::GetActuatorTorques(Vector& t) const
   }
 }
 
-void ControlledRobotSimulator::Step(Real dt)
+void ControlledRobotSimulator::Step(Real dt,WorldSimulation* sim)
 {
   Real endOfTimeStep = curTime + dt;
+
+  //process sensors, which don't operate on the same loop as the controller,
+  //necessarily.
+  if(nextSenseTime.empty()) {
+    //make sure the sensors get updated
+    nextSenseTime.resize(sensors.sensors.size(),0);
+  }
+  for(size_t i=0;i<sensors.sensors.size();i++) {
+    Real delay = 0;
+    if(sensors.sensors[i]->rate == 0)
+      delay = controlTimeStep;
+    else
+      delay = 1.0/sensors.sensors[i]->rate;
+    if(delay < dt) {
+      printf("Sensor %s set to rate higher than internal simulation time step\n",sensors.sensors[i]->name.c_str());
+      printf("  ... Limiting sensor rate to %s\n",1.0/dt);
+      sensors.sensors[i]->rate = 1.0/dt;
+      //todo: handle numerical errors in inversion...
+      delay = dt;
+    }
+
+    if(curTime >= nextSenseTime[i]) {
+      //trigger a sensing action
+      sensors.sensors[i]->Simulate(this,sim);
+      sensors.sensors[i]->Advance(delay);
+      nextSenseTime[i] += delay;
+    }
+  }
 
   if(controller) {
     //the controller update happens less often than the PID update loop
     if(nextControlTime < endOfTimeStep) {
-      //simulate sensors
-      SimulateSensors();
       //update controller
       controller->sensors = &sensors;
       controller->command = &command;
@@ -178,38 +224,40 @@ void ControlledRobotSimulator::Step(Real dt)
     oderobot->SetDriverFixedVelocity(i,cmd.desiredVelocity,cmd.torque);
       }
       else {
-    if(d.type == RobotJointDriver::Normal || d.type == RobotJointDriver::Translation || d.type == RobotJointDriver::Rotation) {
-      oderobot->AddDriverTorque(i,t(i));
-    }
-    else if(d.type == RobotJointDriver::Affine) {
-      Real q=cmd.qdes;
-      Real dq=cmd.dqdes;
-      Vector tjoints(d.linkIndices.size());
-      Vector driverBasis(d.linkIndices.size());
-      robot->SetDriverValue(i,q);
-      robot->SetDriverVelocity(i,dq);
-      //TODO: don't hard-code these!  But how to encode arbitrary drive
-      //trains?
-      Real mechStiffness = 20;
-      Real mechDamping = 0.2;
-      Real mechMaxTorque = 2;
-      for(size_t j=0;j<d.linkIndices.size();j++) {
-        int link = d.linkIndices[j];
-        driverBasis[j] = d.affScaling[j]; //todo: should be a transmission parameter in the joint driver
-        tjoints[j] = mechStiffness*(robot->q(link)-oderobot->GetLinkAngle(link)) + mechDamping*(robot->dq(link)-oderobot->GetLinkVelocity(link));
-      }
-      tjoints.madd(driverBasis,-tjoints.dot(driverBasis)/driverBasis.normSquared());
-      if(tjoints.norm() > mechMaxTorque)
-        tjoints *= mechMaxTorque/tjoints.norm();
-      //cout<<"Stabilizing torques: "<<tjoints<<endl;
-      tjoints.madd(driverBasis,t[i]);
-      //cout<<"Torques: "<<tjoints<<endl;
-      for(size_t j=0;j<d.linkIndices.size();j++)
-        oderobot->AddLinkTorque(d.linkIndices[j],tjoints[j]);
-    }
-    else {
-      FatalError("Unknown driver type");
-    }
+	if(d.type == RobotJointDriver::Normal || d.type == RobotJointDriver::Translation || d.type == RobotJointDriver::Rotation) {
+	  oderobot->AddDriverTorque(i,t(i));
+	}
+	else if(d.type == RobotJointDriver::Affine) {
+	  //figure out how the drive mechanism affects torques on the links
+	  Real q=cmd.qdes;
+	  Real dq=cmd.dqdes;
+	  Vector tjoints(d.linkIndices.size());
+	  Vector driverBasis(d.linkIndices.size());
+	  //robot joints now have desired q and dq
+	  robot->SetDriverValue(i,q);
+	  robot->SetDriverVelocity(i,dq);
+	  //TODO: don't hard-code these!  But how to encode arbitrary drive
+	  //trains?
+	  Real mechStiffness = 20;
+	  Real mechDamping = 0.2;
+	  Real mechMaxTorque = 2;
+	  for(size_t j=0;j<d.linkIndices.size();j++) {
+	    int link = d.linkIndices[j];
+	    driverBasis[j] = d.affScaling[j]; //todo: should be a transmission parameter in the joint driver
+	    tjoints[j] = mechStiffness*(robot->q(link)-oderobot->GetLinkAngle(link)) + mechDamping*(robot->dq(link)-oderobot->GetLinkVelocity(link));
+	  }
+	  tjoints.madd(driverBasis,-tjoints.dot(driverBasis)/driverBasis.normSquared());
+	  if(tjoints.norm() > mechMaxTorque)
+	    tjoints *= mechMaxTorque/tjoints.norm();
+	  //cout<<"Stabilizing torques: "<<tjoints<<endl;
+	  tjoints.madd(driverBasis,t[i]);
+	  //cout<<"Torques: "<<tjoints<<endl;
+	  for(size_t j=0;j<d.linkIndices.size();j++) 
+	    oderobot->AddLinkTorque(d.linkIndices[j],tjoints[j]);
+	}
+	else {
+	  FatalError("Unknown driver type");
+	}
       }
       if(cmd.mode == ActuatorCommand::PID) {
     //advance PID controller

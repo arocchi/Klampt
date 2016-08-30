@@ -1,8 +1,8 @@
 #include "ContactCSpace.h"
-#include <robotics/IKFunctions.h>
-#include <robotics/JointStructure.h>
-#include <math3d/random.h>
-#include <Timer.h>
+#include <KrisLibrary/robotics/IKFunctions.h>
+#include <KrisLibrary/robotics/JointStructure.h>
+#include <KrisLibrary/math3d/random.h>
+#include <KrisLibrary/Timer.h>
 
 #define TEST_NO_JOINT_LIMITS 0
 #define DO_TIMING 1
@@ -296,12 +296,12 @@ void MultiContactCSpace::InitContactPairs(const vector<ContactPair>& pairs)
   for(size_t i=0;i<robotActive.size();i++)
     if(robotActive[i]) {
       numRobots++;
-      int robotid = robot.Add(world.robots[i].robot,world.robots[i].name.c_str());
+      int robotid = robot.Add(world.robots[i],world.robots[i]->name.c_str());
       worldIDtoRobotID[world.RobotID(i)] = robotid;
     }
   for(size_t i=0;i<objectActive.size();i++)
     if(objectActive[i]){
-      int robotid = robot.Add(world.rigidObjects[i].object,world.rigidObjects[i].name.c_str());
+      int robotid = robot.Add(world.rigidObjects[i],world.rigidObjects[i]->name.c_str());
       worldIDtoRobotID[world.RigidObjectID(i)] = robotid;
       numObjects++;
     }

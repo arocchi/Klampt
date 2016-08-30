@@ -15,14 +15,17 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->radioButton->setChecked(1);
 }
 
-void MainWindow::Initialize(int _argc,const char** _argv)
+bool MainWindow::Initialize(int _argc,const char** _argv)
 {
     argc=_argc;
     argv=_argv;
 
     const string robname="placeholder";
     //world->AddRobot(robname,&robot);
-    world.LoadRobot(argv[1]);
+    if(world.LoadRobot(argv[1]) < 0) {
+      printf("RobotTest: error loading robot file %s, quitting\n",argv[1]);
+      return false;
+    }
     backend = new RobotTestBackend(&world);
     printf("BACKEND LOADED\n");
     gui=new QRobotTestGUI(backend,ui->displaywidget);
@@ -40,12 +43,11 @@ void MainWindow::Initialize(int _argc,const char** _argv)
     connect(ui->spn_driver,SIGNAL(valueChanged(double)),gui,SLOT(SetDriverValue(double)));
     connect(ui->spn_link,SIGNAL(valueChanged(double)),gui,SLOT(SetLinkValue(double)));
 
-    rob=world.robots[0].robot;
+    rob=world.robots[0];
 
     //fill GUI info
     for(int i=0;i<rob->linkNames.size();i++)
-        ui->cb_link->addItem(QString::fromStdString(rob->linkNames[i]))
-                ;
+        ui->cb_link->addItem(QString::fromStdString(rob->linkNames[i]));
     for(int i=0;i<rob->drivers.size();i++)
         ui->cb_driver->addItem(QString::fromStdString(rob->driverNames[i]));
 
@@ -54,6 +56,8 @@ void MainWindow::Initialize(int _argc,const char** _argv)
 
     ui->displaywidget->installEventFilter(this);
     ui->displaywidget->setFocusPolicy(Qt::WheelFocus);    
+	
+    return true;
 }
 
 void MainWindow::SetGeometry(bool status){

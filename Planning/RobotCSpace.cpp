@@ -1,14 +1,35 @@
 #include "RobotCSpace.h"
 #include "Modeling/Interpolate.h"
-#include <math/angle.h>
-#include <math/random.h>
-#include <math3d/rotation.h>
-#include <math3d/random.h>
-#include <math3d/interpolate.h>
-#include <robotics/Rotation.h>
-#include <planning/EdgePlanner.h>
-#include <Timer.h>
+#include <KrisLibrary/math/angle.h>
+#include <KrisLibrary/math/random.h>
+#include <KrisLibrary/math3d/rotation.h>
+#include <KrisLibrary/math3d/random.h>
+#include <KrisLibrary/math3d/interpolate.h>
+#include <KrisLibrary/robotics/Rotation.h>
+#include <KrisLibrary/planning/EdgePlanner.h>
+#include <KrisLibrary/Timer.h>
 #include <sstream>
+
+Real RandLaplacian()
+{
+  Real v = Rand();
+  if(v==0) v = Epsilon;
+  return -Log(v);
+}
+
+Real RandTwoSidedLaplacian()
+{
+  if(RandBool(0.5)) return RandLaplacian();
+  else return -RandLaplacian();
+}
+
+Real SafeRand(Real a,Real b)
+{
+  if(IsInf(a) && IsInf(b)) return RandTwoSidedLaplacian();
+  else if(IsInf(a)) return b-RandLaplacian();
+  else if(IsInf(b)) return a+RandLaplacian();
+  else return Rand(a,b);
+}
 
 RobotCSpace::RobotCSpace(Robot& _robot)
   :robot(_robot),norm(2.0)
@@ -19,7 +40,7 @@ RobotCSpace::RobotCSpace(Robot& _robot)
 
 void RobotCSpace::Sample(Config& q)
 {
-  for(int i=0;i<robot.joints.size();i++) {
+  for(size_t i=0;i<robot.joints.size();i++) {
     int link = robot.joints[i].linkIndex;
     switch(robot.joints[i].type) {
     case RobotJoint::Weld:
@@ -30,14 +51,28 @@ void RobotCSpace::Sample(Config& q)
     case RobotJoint::Spin:
       robot.q(link) = Rand(0,TwoPi);
       break;
+    case RobotJoint::FloatingPlanar:
+      {
+      int p = robot.parents[link];
+      assert(p>=0);
+      int pp = robot.parents[p];
+      assert(pp>=0);
+      robot.q(link) = Rand(0,TwoPi);
+      robot.q(p) = SafeRand(robot.qMin(p),robot.qMax(p));
+      robot.q(pp) = SafeRand(robot.qMin(pp),robot.qMax(pp));
+      break;
+      }
     case RobotJoint::Floating:
     case RobotJoint::BallAndSocket:
       {
-	Matrix3 R;
+	RigidTransform T;
+  T.t.x = RandTwoSidedLaplacian();
+  T.t.y = RandTwoSidedLaplacian();
+  T.t.z = RandTwoSidedLaplacian();
 	QuaternionRotation qr;
 	RandRotation(qr);
-	qr.getMatrix(R);
-	robot.SetJointByOrientation(i,robot.joints[i].linkIndex,R);
+	qr.getMatrix(T.R);
+	robot.SetJointByTransform(i,robot.joints[i].linkIndex,T);
       }
       break;
     default:
@@ -137,7 +172,7 @@ void RobotCSpace::Properties(PropertyMap& map) const
   vector<Real> weights;
   if(jointWeights.empty()) weights.resize(robot.q.n,1.0);
   else weights = jointWeights;
-  for(int i=0;i<robot.joints.size();i++) {
+  for(size_t i=0;i<robot.joints.size();i++) {
     int link = robot.joints[i].linkIndex;
     switch(robot.joints[i].type) {
     case RobotJoint::Normal:
@@ -534,12 +569,12 @@ SingleRobotCSpace::SingleRobotCSpace(const SingleRobotCSpace& space)
 
 int SingleRobotCSpace::NumDimensions() const
 {
-  return (int)world.robots[index].robot->links.size();
+  return (int)world.robots[index]->links.size();
 }
 
 Robot* SingleRobotCSpace::GetRobot() const
 {
-  return world.robots[index].robot;
+  return world.robots[index];
 }
 
 bool SingleRobotCSpace::CheckJointLimits(const Config& x)
@@ -721,6 +756,7 @@ bool SingleRobotCSpace::CheckCollisionFree()
   Robot* robot = GetRobot();
   robot->UpdateGeometry();
 
+  /*
   if(!collisionPairsInitialized) InitializeCollisionPairs();
 
   for(size_t i=0;i<collisionQueries.size();i++) {
@@ -728,6 +764,26 @@ bool SingleRobotCSpace::CheckCollisionFree()
       return false;
     }
   }
+  return true;
+  */
+  //this method may be faster for many-DOF robots because it does broad-phase checking first to eliminate candidate collisions
+  int id = world.RobotID(index);
+  vector<int> idrobot(1,id);
+  vector<int> idothers;
+  for(size_t i=0;i<world.terrains.size();i++)
+    idothers.push_back(world.TerrainID(i));
+  for(size_t i=0;i<world.rigidObjects.size();i++)
+    idothers.push_back(world.RigidObjectID(i));
+  for(size_t i=0;i<world.robots.size();i++) {
+    if((int)i != index)
+      idothers.push_back(world.RobotID(i));
+  }
+  //environment collision check
+  pair<int,int> res = settings->CheckCollision(world,idrobot,idothers);
+  if(res.first >= 0) return false;
+  //self collision check
+  res = settings->CheckCollision(world,idrobot);
+  if(res.first >= 0) return false;
   return true;
 }
 
@@ -781,7 +837,7 @@ Real SingleRobotCSpace::Distance(const Config& x, const Config& y)
 {
   //Real sum = 0;
   Real vmax = 0;
-  Robot* robot = world.robots[index].robot;
+  Robot* robot = world.robots[index];
   const Vector& w=settings->robotSettings[index].distanceWeights;
   for(size_t i=0;i<robot->joints.size();i++) {
     switch(robot->joints[i].type) {
@@ -836,7 +892,7 @@ Real SingleRobotCSpace::Distance(const Config& x, const Config& y)
 
 void SingleRobotCSpace::Interpolate(const Config& x,const Config& y,Real u,Config& out)
 {
-  Robot* robot = world.robots[index].robot;
+  Robot* robot = world.robots[index];
   ::Interpolate(*robot,x,y,u,out);
 }
 
@@ -847,7 +903,7 @@ void SingleRobotCSpace::Midpoint(const Config& x,const Config& y,Config& out)
 
 void SingleRobotCSpace::Properties(PropertyMap& map) const
 {
-  Robot* robot = world.robots[index].robot;
+  Robot* robot = world.robots[index];
   int euclidean = 1;
   Real v = 1;
   int dim = robot->q.n;
@@ -856,7 +912,7 @@ void SingleRobotCSpace::Properties(PropertyMap& map) const
   vector<Real> weights;
   if(w.empty()) weights.resize(robot->q.n,1.0);
   else weights = w;
-  for(int i=0;i<robot->joints.size();i++) {
+  for(size_t i=0;i<robot->joints.size();i++) {
     int link = robot->joints[i].linkIndex;
     switch(robot->joints[i].type) {
     case RobotJoint::Normal:
@@ -909,9 +965,9 @@ vector<vector<Geometry::CollisionMeshQueryEnhanced> > linkCollisions;
 void GetCollisionList(RobotWorld& world,int robot,WorldPlannerSettings* settings)
 {
   if(linkCollisions.empty()) {
-    linkIndices.resize(world.robots[robot].robot->links.size());
-    linkCollisions.resize(world.robots[robot].robot->links.size());
-    for(size_t i=0;i<world.robots[robot].robot->links.size();i++) {
+    linkIndices.resize(world.robots[robot]->links.size());
+    linkCollisions.resize(world.robots[robot]->links.size());
+    for(size_t i=0;i<world.robots[robot]->links.size();i++) {
       linkIndices[i].first = (int)i;
       linkIndices[i].second = -1;
     }
@@ -1221,7 +1277,7 @@ Real SingleRigidObjectCSpace::Distance(const Config& x,const Config& y)
 
 RigidObject* SingleRigidObjectCSpace::GetObject() const
 {
-  return world.rigidObjects[index].object;
+  return world.rigidObjects[index];
 }
 
 bool SingleRigidObjectCSpace::IsFeasible(const Config& q)
@@ -1310,7 +1366,7 @@ void MultiRobotCSpace::InitRobots(const vector<int>& indices)
   robotElementIDs.resize(indices.size());
   elementSpaces.resize(indices.size());
   for(size_t i=0;i<indices.size();i++) {
-    robot.Add(world.robots[indices[i]].robot,world.robots[indices[i]].name.c_str());
+    robot.Add(world.robots[indices[i]],world.robots[indices[i]]->name.c_str());
     robotElementIDs[i] = world.RobotID(indices[i]);
     elementSpaces[i] = new SingleRobotCSpace(world,indices[i],settings);
   }
@@ -1318,14 +1374,14 @@ void MultiRobotCSpace::InitRobots(const vector<int>& indices)
 
 void MultiRobotCSpace::AddRobot(int index)
 {
-  int element = robot.Add(world.robots[index].robot,world.robots[index].name.c_str());
+  int element = robot.Add(world.robots[index],world.robots[index]->name.c_str());
   robotElementIDs.push_back(world.RobotID(index));
   elementSpaces.push_back(new SingleRobotCSpace(world,index,settings));
 }
 
 void MultiRobotCSpace::AddRigidObject(int index)
 {
-  int element = robot.Add(world.rigidObjects[index].object,world.rigidObjects[index].name.c_str());
+  int element = robot.Add(world.rigidObjects[index],world.rigidObjects[index]->name.c_str());
   robotElementIDs.push_back(world.RigidObjectID(index));
   elementSpaces.push_back(new SingleRigidObjectCSpace(world,index,settings));
 }

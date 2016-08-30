@@ -13,8 +13,15 @@ class SimRobotController;
 //declarations for internal objects
 class SensorBase;
 class WorldSimulation;
+class ControlledRobotSimulator;
 class ODEGeometry;
 typedef struct dxBody *dBodyID;
+
+//forward declarations
+class SimRobotSensor;
+class SimRobotController;
+class SimBody;
+class Simulator;
 
 /** @brief A sensor on a simulated robot.  Retreive this from the controller,
  * and use getMeasurements to get the currently simulated measurement vector.
@@ -57,6 +64,8 @@ class SimRobotController
  public:
   SimRobotController();
   ~SimRobotController();
+  ///Retrieves the robot model associated with this controller
+  RobotModel model();
   /// Sets the current feedback control rate
   void setRate(double dt);
 
@@ -71,8 +80,12 @@ class SimRobotController
   void getSensedVelocity(std::vector<double>& out);
 
   /// Returns a sensor by index.  If out of bounds, a null sensor is returned
-  SimRobotSensor getSensor(int index);
+  SimRobotSensor sensor(int index);
   /// Returns a sensor by name.  If unavailable, a null sensor is returned
+  SimRobotSensor sensor(const char* name);
+  ///Old-style: will be deprecated
+  SimRobotSensor getSensor(int index);
+  ///Old-style: will be deprecated
   SimRobotSensor getNamedSensor(const std::string& name);
 
   /// gets a command list
@@ -103,7 +116,7 @@ class SimRobotController
   /// configuration/velocity to the desired configuration/velocity after time dt
   void setCubic(const std::vector<double>& q,const std::vector<double>& v,double dt);
   /// Same as setLinear but appends an interpolant onto the motion queue
-  void appendLinear(const std::vector<double>& q,double dt);
+  void addLinear(const std::vector<double>& q,double dt);
   /// Same as setCubic but appends an interpolant onto the motion queue
   void addCubic(const std::vector<double>& q,const std::vector<double>& v,double dt);
 
@@ -136,7 +149,8 @@ class SimRobotController
   void setPIDGains(const std::vector<double>& kP,const std::vector<double>& kI,const std::vector<double>& kD);
 
   int index;
-  WorldSimulation* sim;
+  Simulator* sim;
+  ControlledRobotSimulator* controller;
 };
 
 /** @brief A reference to a rigid body inside a Simulator (either a
@@ -157,14 +171,20 @@ class SimBody
   /// Returns true if this body is being simulated
   bool isEnabled();
 
-  /// Applies a force and torque about the COM at the current simulation
-  /// time step.
+  /// Sets the dynamic simulation of the body on/off.  If false, velocities
+  /// will simply be integrated forward, and forces will not affect velocity
+  /// i.e., it will be pure kinematic simulation.
+  void enableDynamics(bool enabled=true);
+  bool isDynamicsEnabled();
+
+  /// Applies a force and torque about the COM over the duration of the
+  /// next Simulator.simulate(t) call.
   void applyWrench(const double f[3],const double t[3]);
-  /// Applies a force at a given point (in world coordinates) at the
-  ///current simulation time step.
+  /// Applies a force at a given point (in world coordinates) over the
+  /// duration of the next Simulator.simulate(t) call.
   void applyForceAtPoint(const double f[3],const double pworld[3]);
-  /// Applies a force at a given point (in local coordinates) at the
-  ///current simulation time step.
+  /// Applies a force at a given point (in local coordinates) over
+  /// the duration of the next Simulator.simulate(t) call.
   void applyForceAtLocalPoint(const double f[3],const double plocal[3]);
 
   /// Sets the body's transformation at the current
@@ -181,11 +201,17 @@ class SimBody
   /// Sets the collision padding (useful for thin objects).  Default is 0.0025
   void setCollisionPadding(double padding);
   double getCollisionPadding();
+  /// If set, preshrinks the geometry so that the padded geometry better matches
+  /// the original mesh.  If shrinkVisualization=true, the underlying mesh is
+  /// also shrunk (helps debug)
+  void setCollisionPreshrink(bool shrinkVisualization=false);
 
-  /// Gets/sets the surface properties
+  /// Gets (a copy of) the surface properties
   ContactParameters getSurface();
+  /// Sets the surface properties
   void setSurface(const ContactParameters& params);
 
+  Simulator* sim;
   ODEGeometry* geometry;
   dBodyID body;
 };
@@ -197,12 +223,12 @@ class Simulator
  public:
   /// Constructs the simulator from a WorldModel.  If the WorldModel was
   /// loaded from an XML file, then the simulation setup is loaded from it.
-  Simulator(const WorldModel& model);
+  Simulator(const WorldModel& model,const char* settings=NULL);
   ~Simulator();
 
   /// Resets to the initial state (same as setState(initialState))
   void reset();
-  /// Returns the associated world model
+  /// Old-style: will be deprecated
   WorldModel getWorld() const;
 
   /// Returns a Base64 string representing the binary data for the current
@@ -237,35 +263,66 @@ class Simulator
   /// Call this to enable contact feedback between the two objects
   /// (arguments are indexes returned by object.getID()).  Contact feedback
   /// has a small overhead so you may want to do this selectively.
+  /// This must be called before using inContact, getContacts, getContactForces,
+  /// contactForce, contactTorque, hadContact, hadSeparation, hadPenetration,
+  /// and meanContactForce.
   void enableContactFeedback(int obj1,int obj2);
   /// Call this to enable contact feedback between all pairs of objects.
   /// Contact feedback has a small overhead so you may want to do this
   /// selectively.
   void enableContactFeedbackAll();
   /// Returns true if the objects (indexes returned by object.getID()) are in
-  /// contact on the current time step
+  /// contact on the current time step.  You can set bid=-1 to tell if object a
+  /// is in contact with any object. 
   bool inContact(int aid,int bid);
   /// Returns the list of contacts (x,n,kFriction) at the last time step.
-  /// Normals point into object a.
+  /// Normals point into object a.  The contact point (x,n,kFriction) is 
+  /// represented as a 7-element vector
   void getContacts(int aid,int bid,std::vector<std::vector<double> >& out);
   /// Returns the list of contact forces on object a at the last time step
   void getContactForces(int aid,int bid,std::vector<std::vector<double> >& out);
-  /// Returns the contact force on object a at the last time step
+  /// Returns the contact force on object a at the last time step.  You can set
+  /// bid to -1 to get the overall contact force on object a.
   void contactForce(int aid,int bid,double out[3]);
-  /// Returns true if the objects had contact over the last simulate() call
+  /// Returns the contact force on object a (about a's origin) at the last time step.
+  /// You can set bid to -1 to get the overall contact force on object a.
+  void contactTorque(int aid,int bid,double out[3]);
+  /// Returns true if the objects had contact over the last simulate() call.  You
+  /// can set bid to -1 to determine if object a had contact with any other object.
   bool hadContact(int aid,int bid);
   /// Returns true if the objects had ever separated during the last
-  /// simulate() call
+  /// simulate() call. You can set bid to -1 to determine if object a had no contact
+  /// with any other object.
   bool hadSeparation(int aid,int bid);
+  /// Returns true if the objects interpenetrated during the last simulate()
+  /// call.  If so, the simulation may lead to very inaccurate results or
+  /// artifacts.  You can set bid to -1 to determine if object a penetrated
+  /// any object, or you can set aid=bid=-1 to determine whether any object
+  /// is penetrating any other (indicating that the simulation will not be
+  /// functioning properly in general).
+  bool hadPenetration(int aid,int bid);
   /// Returns the average contact force on object a over the last simulate()
   /// call
   void meanContactForce(int aid,int bid,double out[3]);
 
   /// Returns a controller for the indicated robot
+  SimRobotController controller(int robot);
+  SimRobotController controller(const RobotModel& robot);
+  ///Returns the SimBody corresponding to the given link
+  SimBody body(const RobotModelLink& link);
+  ///Returns the SimBody corresponding to the given object
+  SimBody body(const RigidObjectModel& object);
+  ///Returns the SimBody corresponding to the given terrain
+  SimBody body(const TerrainModel& terrain);
+  ///Old-style: will be deprecated
   SimRobotController getController(int robot);
+  ///Old-style: will be deprecated
   SimRobotController getController(const RobotModel& robot);
+  ///Old-style: will be deprecated
   SimBody getBody(const RobotModelLink& link);
+  ///Old-style: will be deprecated
   SimBody getBody(const RigidObjectModel& object);
+  ///Old-style: will be deprecated
   SimBody getBody(const TerrainModel& terrain);
 
   /// Returns the joint force and torque local to the link, as would be read

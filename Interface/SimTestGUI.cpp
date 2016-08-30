@@ -1,12 +1,13 @@
 #include "SimTestGUI.h"
-#include <GLdraw/GLError.h>
-#include <utils/AnyValue.h>
-#include <utils/ioutils.h>
-#include <math/random.h>
+#include <KrisLibrary/GLdraw/GLError.h>
+#include <KrisLibrary/utils/AnyValue.h>
+#include <KrisLibrary/utils/ioutils.h>
+#include <KrisLibrary/utils/apputils.h>
+#include <KrisLibrary/math/random.h>
 
 
 SimTestBackend::SimTestBackend(RobotWorld* world)
-  :SimGUIBackend(world)
+  :SimGUIBackend(world),settings("Klampt")
 {
   settings["movieWidth"] = 640;
   settings["movieHeight"] = 480;
@@ -36,9 +37,11 @@ SimTestBackend::SimTestBackend(RobotWorld* world)
 void SimTestBackend::Start()
 {
   if(!settings.read("simtest.settings")) {
-    printf("Didn't read settings from simtest.settings\n");
-    printf("Writing default settings to simtest_default.settings\n");
-    settings.write("simtest_default.settings");
+    printf("Didn't read settings from [APPDATA]/simtest.settings\n");
+    if(!settings.write("simtest.settings")) 
+      printf("ERROR: couldn't write default settings to [APPDATA]/simtest.settings\n");
+    else
+      printf("Wrote default settings to [APPDATA]/simtest.settings\n");
   }
 
   cur_link=0;
@@ -47,8 +50,8 @@ void SimTestBackend::Start()
   dragWidget.Set(world);
   robotWidgets.resize(world->robots.size());
   for(size_t i=0;i<world->robots.size();i++) {
-    robotWidgets[i].Set(world->robots[i].robot,&world->robots[i].view);
-    robotWidgets[i].linkPoser.poserAppearance = world->robots[i].view.linkAppearance;
+    robotWidgets[i].Set(world->robots[i],&world->robotViews[i]);
+    robotWidgets[i].linkPoser.poserAppearance.resize(world->robots[i]->links.size());
     AnyCollection poserColorSetting = settings["poser"]["color"];
     GLColor poserColor(poserColorSetting[0],poserColorSetting[1],poserColorSetting[2],poserColorSetting[3]);
     for(size_t j=0;j<robotWidgets[i].linkPoser.poserAppearance.size();j++)
@@ -57,7 +60,7 @@ void SimTestBackend::Start()
   //draw desired milestone
   objectWidgets.resize(world->rigidObjects.size());
   for(size_t i=0;i<world->rigidObjects.size();i++) 
-    objectWidgets[i].Set(world->rigidObjects[i].object,&world->rigidObjects[i].view);
+    objectWidgets[i].Set(world->rigidObjects[i]);
   allWidgets.widgets.push_back(&dragWidget);
   for(size_t i=0;i<world->robots.size();i++)
     allRobotWidgets.widgets.push_back(&robotWidgets[i]);
@@ -199,8 +202,6 @@ void SimTestBackend::RenderWorld()
   BaseT::RenderWorld();
 
   glEnable(GL_BLEND);
-  Robot* robot=world->robots[0].robot;
-  RobotController* rc=sim.robotControllers[0];
   allWidgets.Enable(&allRobotWidgets,drawPoser==1);
   allWidgets.DrawGL(viewport);
 
@@ -211,15 +212,19 @@ void SimTestBackend::RenderWorld()
 
   //draw commanded setpoint
   if(drawDesired) {
-    robot->UpdateConfig(robotWidgets[0].Pose());
-    sim.controlSimulators[0].GetCommandedConfig(robot->q);
-    robot->UpdateFrames();
-    AnyCollection desiredColorSetting = settings["desired"]["color"];
-    GLColor desiredColor(desiredColorSetting[0],desiredColorSetting[1],desiredColorSetting[2],desiredColorSetting[3]);
-    vector<GeometryAppearance> oldAppearance = world->robots[0].view.linkAppearance;
-    world->robots[0].view.SetColors(desiredColor);
-    world->robots[0].view.Draw();
-    world->robots[0].view.linkAppearance = oldAppearance;
+    for(size_t r=0;r<world->robots.size();r++) {
+      Robot* robot=world->robots[r];
+      
+      robot->UpdateConfig(robotWidgets[r].Pose());
+      sim.controlSimulators[r].GetCommandedConfig(robot->q);
+      robot->UpdateFrames();
+      AnyCollection desiredColorSetting = settings["desired"]["color"];
+      GLColor desiredColor(desiredColorSetting[0],desiredColorSetting[1],desiredColorSetting[2],desiredColorSetting[3]);
+      vector<GeometryAppearance> oldAppearance = world->robotViews[r].GetAppearance();
+      world->robotViews[r].SetColors(desiredColor);
+      world->robotViews[r].Draw();
+      world->robotViews[r].SetAppearance(oldAppearance);
+    }
   }
   if(drawEstimated) {
   }
@@ -238,7 +243,10 @@ void SimTestBackend::RenderWorld()
 
   if(drawWrenches) {
     Real robotsize = 1.5;
-    Real fscale = robotsize/(robot->GetTotalMass()*9.8);
+    Real robotmass = 1.5;
+    if(world->robots.size() > 1)
+      robotmass = world->robots[0]->GetTotalMass();
+    Real fscale = robotsize/(robotmass*9.8);
     DrawWrenches(fscale);
   }
 
@@ -246,9 +254,9 @@ void SimTestBackend::RenderWorld()
   if(drawBBs) {
     sim.UpdateModel();
     for(size_t i=0;i<world->robots.size();i++) {
-      for(size_t j=0;j<world->robots[i].robot->geometry.size();j++) {
-	if(world->robots[i].robot->geometry[j].Empty()) continue;
-	Box3D bbox = world->robots[i].robot->geometry[j].GetBB();
+      for(size_t j=0;j<world->robots[i]->geometry.size();j++) {
+	if(world->robots[i]->IsGeometryEmpty(j)) continue;
+	Box3D bbox = world->robots[i]->geometry[j]->GetBB();
 	Matrix4 basis;
 	bbox.getBasis(basis);
 	glColor3f(1,0,0);
@@ -256,14 +264,14 @@ void SimTestBackend::RenderWorld()
       }
     }
     for(size_t i=0;i<world->rigidObjects.size();i++) {
-      Box3D bbox = world->rigidObjects[i].object->geometry.GetBB();
+      Box3D bbox = world->rigidObjects[i]->geometry->GetBB();
       Matrix4 basis;
       bbox.getBasis(basis);
       glColor3f(1,0,0);
       drawOrientedWireBox(bbox.dims.x,bbox.dims.y,bbox.dims.z,basis);
     }
     for(size_t i=0;i<world->terrains.size();i++) {
-      Box3D bbox = world->terrains[i].terrain->geometry.GetBB();
+      Box3D bbox = world->terrains[i]->geometry->GetBB();
       Matrix4 basis;
       bbox.getBasis(basis);
       glColor3f(1,0.5,0);
@@ -293,16 +301,16 @@ void SimTestBackend::ToggleDrawExpandedCheckbox(int checked)
     for(size_t i=0;i<originalAppearance.size();i++) {
       //robots don't get a geometry
       if(world->IsRobot(i) >= 0) continue;
-      originalAppearance[i] = world->GetAppearance(i);
+      originalAppearance[i] = *world->GetAppearance(i);
       expandedAppearance[i].geom = originalAppearance[i].geom;
       expandedAppearance[i].faceColor = originalAppearance[i].faceColor;
       expandedAppearance[i].lightFaces = true;
       expandedAppearance[i].drawFaces = true;
       expandedAppearance[i].drawVertices = false;
-      paddings[i] = world->GetGeometry(i).margin;
+      paddings[i] = world->GetGeometry(i)->margin;
     }
     for(size_t i=0;i<world->robots.size();i++) {
-      for(size_t j=0;j<world->robots[i].robot->links.size();j++) {
+      for(size_t j=0;j<world->robots[i]->links.size();j++) {
 	int id=world->RobotLinkID(i,j);
 	if(sim.odesim.robot(i)->triMesh(j)) 
 	  paddings[id] += sim.odesim.robot(i)->triMesh(j)->GetPadding();
@@ -310,8 +318,8 @@ void SimTestBackend::ToggleDrawExpandedCheckbox(int checked)
     }
     for(size_t i=0;i<world->terrains.size();i++) {
       int id=world->TerrainID(i);
-      if(sim.odesim.envGeom(i)) 
-	paddings[id] += sim.odesim.envGeom(i)->GetPadding();
+      if(sim.odesim.terrainGeom(i)) 
+	paddings[id] += sim.odesim.terrainGeom(i)->GetPadding();
     }
     for(size_t i=0;i<world->rigidObjects.size();i++) {
       int id = world->RigidObjectID(i);
@@ -324,7 +332,7 @@ void SimTestBackend::ToggleDrawExpandedCheckbox(int checked)
       if(paddings[i] > 0) {
 	//draw the expanded mesh
 	expandedAppearance[i].faceDisplayList.beginCompile();
-	GLDraw::drawExpanded(world->GetGeometry(i),paddings[i]);
+	GLDraw::drawExpanded(*world->GetGeometry(i),paddings[i]);
 	expandedAppearance[i].faceDisplayList.endCompile();
       }
       else
@@ -336,14 +344,14 @@ void SimTestBackend::ToggleDrawExpandedCheckbox(int checked)
     for(size_t i=0;i<originalAppearance.size();i++) {
       //robots don't get a geometry
       if(world->IsRobot(i) >= 0) continue;
-      world->GetAppearance(i) = expandedAppearance[i];
+      *world->GetAppearance(i) = expandedAppearance[i];
     }
   }
   else {
     for(size_t i=0;i<originalAppearance.size();i++) {
       //robots don't get a geometry
       if(world->IsRobot(i) >= 0) continue;
-      world->GetAppearance(i) = originalAppearance[i];
+      *world->GetAppearance(i) = originalAppearance[i];
     }
   }
   SendRefresh();
@@ -358,7 +366,7 @@ bool SimTestBackend::OnCommand(const string& cmd,const string& args)
   else if(cmd=="reset")  {
     BaseT::OnCommand(cmd,args);
     for(size_t i=0;i<world->robots.size();i++) {
-      robotWidgets[i].SetPose(world->robots[i].robot->q);
+      robotWidgets[i].SetPose(world->robots[i]->q);
       robotWidgets[i].ikPoser.poseGoals.clear();
       robotWidgets[i].ikPoser.RefreshWidgets();
     }
@@ -377,9 +385,14 @@ bool SimTestBackend::OnCommand(const string& cmd,const string& args)
     }
   }
   else if(cmd=="command_config") {
-    RobotController* rc=sim.robotControllers[0];
-    if(!rc->SendCommand("set_q",args)) {
-      fprintf(stderr,"set_q command does not work with the robot's controller\n");
+    if(sim.robotControllers.size() == 0) {
+	fprintf(stderr,"set_q command does not work when there is no robot\n");
+    }
+    else {
+      RobotController* rc=sim.robotControllers[0];
+      if(!rc->SendCommand("set_q",args)) {
+	fprintf(stderr,"set_q command does not work with the robot's controller\n");
+      }
     }
   }
   else if(cmd=="load_file") {
@@ -443,9 +456,11 @@ bool SimTestBackend::OnCommand(const string& cmd,const string& args)
   else if(cmd=="set_link_value") {
     double value;
     ss>>value;
-    Vector q = robotWidgets[0].Pose();
-    q(cur_link)=value;
-    robotWidgets[0].SetPose(q);
+    if(world->robots.size()>0) {
+      Vector q = robotWidgets[0].Pose();
+      q(cur_link)=value;
+      robotWidgets[0].SetPose(q);
+    }
   }
   else if(cmd=="set_driver") {
     ss >> cur_driver;
@@ -453,10 +468,12 @@ bool SimTestBackend::OnCommand(const string& cmd,const string& args)
   else if(cmd=="set_driver_value") {
     double driver_value;
     ss>>driver_value;
-    Robot* robot = world->robots[0].robot;
-    robot->UpdateConfig(robotWidgets[0].Pose());
-    robot->SetDriverValue(cur_driver,driver_value);
-    robotWidgets[0].SetPose(robot->q);
+    if(world->robots.size()>0) {
+      Robot* robot = world->robots[0];
+      robot->UpdateConfig(robotWidgets[0].Pose());
+      robot->SetDriverValue(cur_driver,driver_value);
+      robotWidgets[0].SetPose(robot->q);
+    }
   }
   else if(cmd=="log_sim") {
     simLogFile = args;
@@ -497,12 +514,12 @@ bool SimTestBackend::LoadFile(const char* fn)
     size_t no = objectWidgets.size();
     robotWidgets.resize(world->robots.size());
     for(size_t i=nr;i<world->robots.size();i++) {
-      robotWidgets[i].Set(world->robots[i].robot,&world->robots[i].view);
+      robotWidgets[i].Set(world->robots[i],&world->robotViews[i]);
       allRobotWidgets.widgets.push_back(&robotWidgets[i]);
     }
     objectWidgets.resize(world->rigidObjects.size());
     for(size_t i=no;i<world->rigidObjects.size();i++) {
-      objectWidgets[i].Set(world->rigidObjects[i].object,&world->rigidObjects[i].view);
+      objectWidgets[i].Set(world->rigidObjects[i]);
       allObjectWidgets.widgets.push_back(&objectWidgets[i]);
     }
     return true;
@@ -532,7 +549,6 @@ void SimTestBackend::BeginDrag(int x,int y,int button,int modifiers)
   allWidgets.Enable(&allObjectWidgets,((click_mode != ModeForceApplication) && (pose_objects == 1)));
   allWidgets.Enable(&allRobotWidgets,(click_mode != ModeForceApplication && drawPoser==1));
 
-  Robot* robot = world->robots[0].robot;
   if(button == GLUT_RIGHT_BUTTON) {
     double d;
     if(allWidgets.BeginDrag(x,viewport.h-y,viewport,d))
@@ -568,7 +584,6 @@ void SimTestBackend::EndDrag(int x,int y,int button,int modifiers)
 
 void SimTestBackend::DoFreeDrag(int dx,int dy,int button)
 {
-  Robot* robot = world->robots[0].robot;
   if(button == GLUT_LEFT_BUTTON)  DragRotate(dx,dy);
   else if(button == GLUT_RIGHT_BUTTON) {
     //dragging widgets
@@ -588,7 +603,7 @@ void SimTestBackend::DoFreeDrag(int dx,int dy,int button)
       if(allObjectWidgets.hasFocus) {
 	for(size_t i=0;i<objectWidgets.size();i++)
 	  if(objectWidgets[i].hasFocus) {
-	    sim.odesim.object(i)->SetTransform(world->rigidObjects[i].object->T);
+	    sim.odesim.object(i)->SetTransform(world->rigidObjects[i]->T);
 	    sim.odesim.object(i)->SetVelocity(Vector3(0.0),Vector3(0.0));
 	  }
       }
@@ -613,8 +628,14 @@ void SimTestBackend::SimStep(Real dt)
       body = sim.odesim.robot(obj.index)->baseBody(obj.bodyIndex);
       sim.odesim.robot(obj.index)->GetLinkTransform(obj.bodyIndex,T);
     }
-    Vector3 wp = T*dragWidget.hoverPt;
-    sim.hooks.push_back(new SpringHook(body,wp,dragWidget.dragPt,dragForce));
+    else {
+      fprintf(stderr,"Trying to drag terrain?\n");
+      body = NULL;
+    }
+    if(body != NULL) {
+      Vector3 wp = T*dragWidget.hoverPt;
+      sim.hooks.push_back(new SpringHook(body,wp,dragWidget.dragPt,dragForce));
+    }
   }
   else
     forceSpringActive = false;
@@ -674,7 +695,7 @@ void SimTestBackend::SimStep(Real dt)
     
   //update root of poseConfig from simulation
   for(size_t r=0;r<world->robots.size();r++) {
-    Robot* robot=world->robots[r].robot;
+    Robot* robot=world->robots[r];
     robot->UpdateConfig(robotWidgets[r].Pose());
     Vector driverVals(robot->drivers.size());
     for(size_t i=0;i<robot->drivers.size();i++)
@@ -688,7 +709,7 @@ void SimTestBackend::SimStep(Real dt)
   //update object configurations from simulation
   sim.UpdateModel();
   for(size_t i=0;i<world->rigidObjects.size();i++)
-    objectWidgets[i].SetPose(world->rigidObjects[i].object->T);
+    objectWidgets[i].SetPose(world->rigidObjects[i]->T);
 
   SendCommand("update_sim_time",LexicalCast(sim.time));
 }
@@ -743,7 +764,7 @@ void delete_all(GLUI_Listbox* listbox)
 }
 
 GLUISimTestGUI::GLUISimTestGUI(GenericBackendBase* _backend,RobotWorld* _world,int w,int h)
-  :world(_world)
+  :world(_world),settings("Klampt")
 {
   BaseT::backend = _backend;
   BaseT::width = w;
@@ -757,6 +778,10 @@ GLUISimTestGUI::GLUISimTestGUI(GenericBackendBase* _backend,RobotWorld* _world,i
 bool GLUISimTestGUI::Initialize()
 {
   if(!BaseT::Initialize()) return false;
+
+  if(world->robots.size() == 0) {
+    FatalError("In GLUI interface, must have at least one robot in the world\n");
+  }
 
   settings["movieWidth"] = 640;
   settings["movieHeight"] = 480;
@@ -858,28 +883,30 @@ bool GLUISimTestGUI::Initialize()
   AddControl(glui->add_checkbox_to_panel(panel,"Pose objects"),"pose_objects");
   AddControl(glui->add_checkbox_to_panel(panel,"Pose by IK"),"pose_ik");
   driver_listbox = glui->add_listbox_to_panel(panel,"Driver",&cur_driver);
-  Robot* robot = world->robots[0].robot;
+  Robot* robot = world->robots[0];
   for(size_t i=0;i<robot->drivers.size();i++) {
     char buf[256];
     strcpy(buf,robot->driverNames[i].c_str());
     driver_listbox->add_item(i,buf);
   }
   AddControl(driver_listbox,"driver");
-
+  
   driver_value_spinner = glui->add_spinner_to_panel(panel,"Value",GLUI_SPINNER_FLOAT);
   AddControl(driver_value_spinner,"driver_value");
   AddControl(glui->add_button_to_panel(panel,"Set milestone"),"set_milestone");
 
   UpdateGUI();
 
+  string appdataPath = AppUtils::GetApplicationDataPath("Klampt");
+  string viewFile = appdataPath + string("/simtest_view.txt");
   const static int NR = 24;
   const static char* rules [NR*3]= {"{type:key_down,key:c}","constrain_link","",
 				    "{type:key_down,key:d}","delete_constraint","",
 				    "{type:key_down,key:p}","print_config","",
 				    "{type:key_down,key:a}","advance","",
 				    "{type:key_down,key:\" \"}","command_pose","",
-				    "{type:key_down,key:v}","save_view","view.txt",
-				    "{type:key_down,key:V}","load_view","view.txt",
+				    "{type:key_down,key:v}","save_view",viewFile.c_str(),
+				    "{type:key_down,key:V}","load_view",viewFile.c_str(),
 				    "{type:button_press,button:simulate}","toggle_simulate","",
 				    "{type:button_press,button:reset}","reset","",
 				    "{type:button_press,button:set_milestone}","command_pose","",
@@ -909,7 +936,7 @@ bool GLUISimTestGUI::Initialize()
 
 void GLUISimTestGUI::UpdateGUI()
 {
-  Robot* robot = world->robots[0].robot;
+  Robot* robot = world->robots[0];
   if(cur_driver >= 0 && cur_driver < (int)robot->drivers.size()) {
     driver_listbox->set_int_val(cur_driver);
     Vector2 limits = robot->GetDriverLimits(cur_driver);
@@ -972,7 +999,7 @@ void GLUISimTestGUI::Handle_Control(int id)
       GLint vp[4];
       glGetIntegerv(GL_VIEWPORT,vp);
       int x=vp[0];
-      int y=vp[1];
+      //int y=vp[1];
       int width = vp[2];
       int height = vp[3];
 
@@ -986,7 +1013,7 @@ void GLUISimTestGUI::Handle_Control(int id)
     return;
   }
   else if(controls[id]==commandEdit) {
-    if(controllerCommandIndex >= 0 && controllerCommandIndex < controllerCommands.size()) {
+    if(controllerCommandIndex >= 0 && controllerCommandIndex < (int)controllerCommands.size()) {
       bool res=sim->robotControllers[0]->SendCommand(controllerCommands[controllerCommandIndex],commandEdit->get_text());
       if(!res) printf("Failed to send command %s(%s)\n",controllerCommands[controllerCommandIndex].c_str(),commandEdit->get_text());
     }

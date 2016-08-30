@@ -4,11 +4,12 @@
 #include "PathController.h"
 #include "JointTrackingController.h"
 #include "SerialController.h"
-#include <utils/PropertyMap.h>
+#include "JointSensors.h"
+#include <KrisLibrary/utils/PropertyMap.h>
 #include <tinyxml.h>
 
 RobotController::RobotController(Robot& _robot)
-  : robot(_robot),time(0),sensors(NULL),command(NULL)
+  : robot(_robot),time(0),nominalTimeStep(0),sensors(NULL),command(NULL)
 {}
 
 bool RobotController::ReadState(File& f) 
@@ -127,7 +128,14 @@ bool RobotController::GetSensedConfig(Config& q)
       fprintf(stderr,"  %s: %s\n",sensors->sensors[i]->Type(),sensors->sensors[i]->name.c_str());
     return false;
   }
-  q = s->q;
+  if(s->indices.empty())
+    q = s->q;
+  else {
+    q.resize(robot.q.size());
+    q.set(0.0);
+    for(size_t i=0;i<s->indices.size();i++)
+      q[s->indices[i]] = s->q[i];
+  }
   return true;
 }
 
@@ -141,7 +149,14 @@ bool RobotController::GetSensedVelocity(Config& dq)
       fprintf(stderr,"  %s: %s\n",sensors->sensors[i]->Type(),sensors->sensors[i]->name.c_str());
     return false;
   }
-  dq = s->dq;
+  if(s->indices.empty())
+    dq = s->dq;
+  else {
+    dq.resize(robot.q.size());
+    dq.set(0.0);
+    for(size_t i=0;i<s->indices.size();i++)
+      dq[s->indices[i]] = s->dq[i];
+  }
   return true;
 }
 
@@ -203,12 +218,30 @@ SmartPointer<RobotController> RobotControllerFactory::Load(TiXmlElement* in,Robo
   TiXmlAttribute* attr = in->FirstAttribute();
   while(attr != NULL) {
     if(0==strcmp(attr->Name(),"type")) {
-      attr = attr->Next();
-      continue;
+      //skip
     }
-    if(!c->SetSetting(attr->Name(),attr->Value())) {
-      fprintf(stderr,"Load controller  %s from XML: Unable to set setting %s\n",in->Attribute("type"),attr->Name());
-      return NULL;
+    else if(0==strcmp(attr->Name(),"rate")) {
+      double temp=0;
+      if(in->QueryValueAttribute("rate",&temp)!=TIXML_SUCCESS || (temp <= 0)){
+	fprintf(stderr,"Invalid rate %g\n",temp);
+	return NULL;
+      }
+      else 
+	c->nominalTimeStep = 1.0/temp;
+    }
+    else if(0==strcmp(attr->Name(),"timeStep")) {
+      double temp=0;
+      if(in->QueryValueAttribute("timeStep",&temp)!=TIXML_SUCCESS || temp <= 0){
+	fprintf(stderr,"Invalid timestep %g\n",temp);
+	return NULL;
+      }
+      c->nominalTimeStep = temp;
+    }
+    else {
+      if(!c->SetSetting(attr->Name(),attr->Value())) {
+	fprintf(stderr,"Load controller  %s from XML: Unable to set setting %s\n",in->Attribute("type"),attr->Name());
+	return NULL;
+      }
     }
     attr = attr->Next();
   }
@@ -225,4 +258,46 @@ bool RobotControllerFactory::Save(RobotController* controller,TiXmlElement* out)
   return true;
 }
 
+SmartPointer<RobotController> RobotControllerFactory::Load(const char* fn,Robot& robot)
+{
+  TiXmlDocument doc;
+  if(!doc.LoadFile(fn)) return NULL;
+  return Load(doc.RootElement(),robot);
+}
+
+bool RobotControllerFactory::Save(RobotController* controller,const char* fn)
+{
+  TiXmlDocument doc;
+  if(!Save(controller,doc.RootElement())) return false;
+  return doc.SaveFile(fn);
+}
+
 map<std::string,SmartPointer<RobotController> > RobotControllerFactory::controllers;
+
+
+
+SmartPointer<RobotController> MakeDefaultController(Robot* robot)
+{
+  string controllerFn;
+  if(robot->properties.get("controller",controllerFn)) {
+    SmartPointer<RobotController> res = RobotControllerFactory::Load(controllerFn.c_str(),*robot);
+    if(res) return res;
+    else {
+      printf("MakeDefaultController: could not load controller file %s\n",controllerFn.c_str());
+      printf("  Making the standard controller instead.\n");
+      printf("  Press enter to continue.\n");
+      getchar();
+    }
+  }
+  PolynomialPathController* c = new PolynomialPathController(*robot);
+  FeedforwardController* fc = new FeedforwardController(*robot,c);
+  LoggingController* lc=new LoggingController(*robot,fc);
+  //defaults -- gravity compensation is better off with free-floating robots
+  if(robot->joints[0].type == RobotJoint::Floating)
+    fc->enableGravityCompensation=false;  //feedforward capability
+  else
+    fc->enableGravityCompensation=true;  //feedforward capability
+  fc->enableFeedforwardAcceleration=false;  //feedforward capability
+  lc->save = false;
+  return lc;
+}

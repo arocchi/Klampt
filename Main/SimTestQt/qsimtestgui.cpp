@@ -1,4 +1,5 @@
 #include "qsimtestgui.h"
+#include <KrisLibrary/utils/apputils.h>
 
 QSimTestGUI::QSimTestGUI(QKlamptDisplay* _display,SimTestBackend *_backend) :
   QtGUIBase(_backend), display(_display)
@@ -11,8 +12,6 @@ QSimTestGUI::QSimTestGUI(QKlamptDisplay* _display,SimTestBackend *_backend) :
   assert(_backend != NULL);
   assert(sim != NULL);
   assert(sim->world != NULL);
-  assert(sim->world->robots.size()>0);
-  assert(sim->controlSimulators.size()>0);
   _backend->gui = this;
 
   driver_tool=new DriverEdit(sim->world);
@@ -24,8 +23,10 @@ QSimTestGUI::QSimTestGUI(QKlamptDisplay* _display,SimTestBackend *_backend) :
   connect(log_options,SIGNAL(HideSensor(int)),this,SLOT(HideSensor(int)));
   connect(log_options,SIGNAL(toggle_measurement(int,int,bool)),this,SLOT(SendMeasurement(int,int,bool)));
   connect(log_options,SIGNAL(toggle_measurement(int,int,bool)),this,SLOT(SendMeasurement(int,int,bool)));
-  RobotSensors sensors=sim->controlSimulators[0].sensors;
-  log_options->robotsensors=sensors;
+  if(sim->controlSimulators.size() > 0) {
+    RobotSensors sensors=sim->controlSimulators[0].sensors;
+    log_options->robotsensors=sensors;
+  }
   log_options->GetSensors();
   //log_options->show();
   //UpdateMeasurements();
@@ -37,6 +38,8 @@ QSimTestGUI::QSimTestGUI(QKlamptDisplay* _display,SimTestBackend *_backend) :
 
   UpdateGUI();
 
+  string appdataPath = AppUtils::GetApplicationDataPath("Klampt");
+  string viewFile = appdataPath + string("/simtest_view.txt");
   const static int NR = 9;
   const static char* rules [NR*3]= {"{type:key_down,key:c}","constrain_link","",
                     "{type:key_down,key:C}","constrain_link_point","",
@@ -44,8 +47,8 @@ QSimTestGUI::QSimTestGUI(QKlamptDisplay* _display,SimTestBackend *_backend) :
 				    "{type:key_down,key:p}","print_config","",
 				    "{type:key_down,key:a}","advance","",
 				    "{type:key_down,key:\" \"}","command_pose","",
-				    "{type:key_down,key:v}","save_view","view.txt",
-				    "{type:key_down,key:V}","load_view","view.txt",
+				    "{type:key_down,key:v}","save_view",viewFile.c_str(),
+				    "{type:key_down,key:V}","load_view",viewFile.c_str(),
 				    "{type:button_toggle,button:simulate,checked:_0}","toggle_simulate","",
   };
   for(int i=0;i<NR;i++) {

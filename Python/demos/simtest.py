@@ -4,7 +4,9 @@ import sys
 from klampt import *
 from klampt.glprogram import *
 import importlib
-from IPython.core.debugger import Tracer
+from klampt.simlog import *
+from klampt.simulation import *
+
 
 class MyGLViewer(GLRealtimeProgram):
     def __init__(self,world):
@@ -14,45 +16,32 @@ class MyGLViewer(GLRealtimeProgram):
         #the current example creates a collision class, simulator, 
         #simulation flag, and screenshot flags
         self.collider = robotcollide.WorldCollider(world)
-        self.sim = Simulator(world)
+        self.sim = SimpleSimulator(world)
+        #contact feedback is enabled, needed to detect penetration situations
+        self.sim.enableContactFeedbackAll()
         self.simulate = False
-        self.controllers = []
         self.forceApplicationMode = False
         
         #this is the controller time step.  The internal simulation time step
         #can be modified in the world's XML file
         self.dt = 0.01
 
+        #press 'c' to toggle display contact points / forces
+        self.drawContacts = False
+
+        #press 'm' to toggle screenshot saving
         self.saveScreenshots = False
         self.nextScreenshotTime = 0
         self.screenshotCount = 0
+
+        self.logger = None
+        #self.logger = SimLogger(self.sim,"simtest_state.csv","simtest_contact.csv")
 
     def display(self):
         #Put your display handler here
         #the current example draws the simulated world in grey and the
         #commanded configurations in transparent green
-        self.sim.updateWorld()
-        self.world.drawGL()
-
-        #draw commanded configurations
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA)
-        glMaterialfv(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE,[0,1,0,0.5])
-        for i in xrange(self.world.numRobots()):
-            r = self.world.robot(i)
-            #Tracer()()
-            mode = self.sim.getController(i).getControlType()
-            if mode == "PID":
-                q = self.sim.getController(i).getCommandedConfig()
-                r.setConfig(q)
-                r.drawGL(False)
-        glDisable(GL_BLEND)
-
-        #draw controller
-        self.sim.updateWorld()
-        for i in xrange(self.world.numRobots()):
-            if i >= len(self.controllers): break
-            self.controllers[i].drawGL()
+        self.sim.drawGL()
             
         #draw force springs if using
         if self.forceApplicationMode:
@@ -67,53 +56,40 @@ class MyGLViewer(GLRealtimeProgram):
             glLineWidth(1.0)
             glEnable(GL_DEPTH_TEST)
 
-    def control_loop(self):
-        for i in xrange(self.world.numRobots()):
-            if i >= len(self.controllers): break
-            c = self.sim.getController(i)
-            #build measurement dict
-            measurements = {'t':self.sim.getTime(),'dt':self.dt}
-            mode = self.sim.getController(i).getControlType()
-            if mode == "PID":
-                measurements['qcmd'] = c.getCommandedConfig()
-                measurements['dqcmd'] = c.getCommandedVelocity()
+        #draw contacts, if enabled
+        if self.drawContacts:
+            glDisable(GL_LIGHTING)
+            glDisable(GL_DEPTH_TEST)
+            glEnable(GL_POINT_SMOOTH)
+            glColor3f(1,1,0)
+            glLineWidth(1.0)
+            glPointSize(5.0)
+            forceLen = 0.1  #scale of forces
+            maxid = self.world.numIDs()
+            for i in xrange(maxid):
+                for j in xrange(i+1,maxid):
+                    points = self.sim.getContacts(i,j)
+                    if len(points) > 0:
+                        forces = self.sim.getContactForces(i,j)
+                        glBegin(GL_POINTS)
+                        for p in points:
+                            glVertex3f(*p[0:3])
+                        glEnd()
+                        glBegin(GL_LINES)
+                        for p,f in zip(points,forces):
+                            glVertex3f(*p[0:3])
+                            glVertex3f(*vectorops.madd(p[0:3],f,forceLen))
+                        glEnd()                        
+            glEnable(GL_DEPTH_TEST)
 
-            k = 0
-            while True:
-                s = c.getSensor(k)
-                if s.type()=='':
-                    break;
-                measurements[s.name()] = s.getMeasurements()
-                k+=1
-            """
-            #debug: print measurements
-            for (k,v) in measurements.iteritems():
-                print k,":",
-                if hasattr(v,'__iter__'):
-                    print ' '.join("%.2f"%(vi,) for vi in v)
-                else:
-                    print v
-            """
-            #compute controller output, advance
-            output = self.controllers[i].output_and_advance(**measurements)
-            #process output depending on type
-            if output==None: continue
-            defaultVals = set(['torquecmd','qcmd','dqcmd','tcmd'])
-            if 'qcmd' in output:
-                dqcmd = output['dqcmd'] if 'dqcmd' in output else [0.0]*len(output['qcmd'])
-                if 'torquecmd' in output:
-                    c.setPIDCommand(output['qcmd'],dqcmd,output['torquecmd'])
-                else:
-                    c.setPIDCommand(output['qcmd'],dqcmd)
-            elif 'dqcmd' in output:
-                assert 'tcmd' in output
-                c.setVelocityCommand(output['dqcmd'],output['tcmd'])
-            elif 'torquecmd' in output:
-                c.setTorque(output['torquecmd'])
-            for (k,v) in output.iteritems():
-                if k not in defaultVals:
-                    print "Sending command",k,v,"to low level controller"
-                    c.sendCommand(k,v)
+    def display_screen(self):
+        glDisable(GL_LIGHTING)
+        self.draw_text(20,20,str(self.sim.getTime()))
+        if self.sim.hadPenetration(-1,-1):
+            self.draw_text(20,40,"Meshes penetrating, simulation may be unstable",color=[1,0,0])
+
+    def control_loop(self):
+        pass
 
     def idle(self):
         #Put your idle loop handler here
@@ -125,6 +101,7 @@ class MyGLViewer(GLRealtimeProgram):
                 self.nextScreenshotTime += 1.0/30.0;
 
         if self.simulate:
+            if self.logger: self.logger.saveStep()
             self.control_loop()
             self.simulateForceSpring()
             self.sim.simulate(self.dt)
@@ -133,7 +110,7 @@ class MyGLViewer(GLRealtimeProgram):
     def mousefunc(self,button,state,x,y):
         #Put your mouse handler here
         #the current example prints out the list of objects clicked whenever
-        #you right click
+        #you right click, and applies forces
         if button==2:
             if state==0:
                 self.sim.updateWorld()
@@ -141,7 +118,7 @@ class MyGLViewer(GLRealtimeProgram):
                 if len(objs) > 0:
                     print "Clicked:",[o[0].getName() for o in objs]
                     (s,d) = self.click_ray(x,y)
-                    if isinstance(objs[0][0],RobotModelLink):
+                    if isinstance(objs[0][0],(RobotModelLink,RigidObjectModel)):
                         print "Clicked, turning on force application mode",objs[0][0].getName()
                         self.forceApplicationMode = True
                         self.addForceSpring(objs[0][0],objs[0][1])
@@ -152,12 +129,12 @@ class MyGLViewer(GLRealtimeProgram):
                 return
         GLRealtimeProgram.mousefunc(self,button,state,x,y)
         
-    def motionfunc(self,x,y):
+    def motionfunc(self,x,y,dx,dy):
         if self.forceApplicationMode:
             self.moveForceSpring(x,y)
             glutPostRedisplay()
         else:
-            GLRealtimeProgram.motionfunc(self,x,y)
+            GLRealtimeProgram.motionfunc(self,x,y,dx,dy)
 
     def moveForceSpring(self,x,y):
         self.sim.updateWorld()
@@ -172,14 +149,12 @@ class MyGLViewer(GLRealtimeProgram):
         self.forceAnchorPoint = worldpt
         self.forceLocalPoint = se3.apply(se3.inv((Ro,to)),self.forceAnchorPoint)
 
-    def simulateForceSpring(self,kP = 100.0):
+    def simulateForceSpring(self,kP = 10.0):
         if not self.forceApplicationMode: return
         self.sim.updateWorld()
-        body = self.sim.getBody(self.forceObject)
+        body = self.sim.body(self.forceObject)
         T = self.forceObject.getTransform()
         wp = se3.apply(T,self.forceLocalPoint)
-        #since we're not applying this force over sub-steps, we have to make it big!
-        kP *= self.dt/0.001
         f = vectorops.mul(vectorops.sub(self.forceAnchorPoint,wp),kP)
         #get wrench about com
         momentArmLocal = vectorops.sub(self.forceLocalPoint,self.forceObject.getMass().getCom())
@@ -196,7 +171,14 @@ class MyGLViewer(GLRealtimeProgram):
         #Put your keyboard handler here
         #the current example toggles simulation / movie mode
         print c,"pressed"
-        if c == 's':
+        if c == 'h':
+            print "************** Help **************"
+            print "s: toggle simulation"
+            print "m: toggle movie mode"
+            print "l: toggle logging"
+            print "c: toggle contact drawing"
+            print "**********************************"
+        elif c == 's':
             self.simulate = not self.simulate
             print "Simulating:",self.simulate
         elif c == 'm':
@@ -204,6 +186,15 @@ class MyGLViewer(GLRealtimeProgram):
             print "Movie mode:",self.saveScreenshots
             if self.nextScreenshotTime < self.sim.getTime():
                 self.nextScreenshotTime = self.sim.getTime()
+        elif c == 'l':
+            self.sim.toggleLogging()
+            if not self.sim.logging:
+                print "Turned off logging"
+        elif c == 'c':
+            self.drawContacts = not self.drawContacts
+            #this is being done automatically now to detect penetration situations
+            #if self.drawContacts:
+            #    self.sim.enableContactFeedbackAll()
         glutPostRedisplay()
 
     def click_world(self,x,y):
@@ -211,12 +202,11 @@ class MyGLViewer(GLRealtimeProgram):
         sorted in order of increasing distance."""
         #get the viewport ray
         (s,d) = self.click_ray(x,y)
-        
+        self.sim.updateWorld()        
         #run the collision tests
-        self.collider.updateFrames()
         collided = []
         for g in self.collider.geomList:
-            (hit,pt) = collide.rayCast(g[1],s,d)
+            (hit,pt) = g[1].rayCast(s,d)
             if hit:
                 dist = vectorops.dot(vectorops.sub(pt,s),d)
                 collided.append((dist,g[0],pt))
@@ -258,6 +248,6 @@ if __name__ == "__main__":
                 print "Module",c.__name__,"must have a make() method"
                 raise
             controller = maker(world.robot(i))
-        viewer.controllers.append(controller)
+        viewer.sim.setController(i,controller)
     
     viewer.run()

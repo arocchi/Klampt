@@ -1,6 +1,6 @@
-#include <math/function.h>
-#include <optimization/Newton.h>
-#include <math/root.h>
+#include <KrisLibrary/math/function.h>
+#include <KrisLibrary/optimization/Newton.h>
+#include <KrisLibrary/math/root.h>
 #include "pyvectorfield.h"
 #include "rootfind.h"
 #include "pyerr.h"
@@ -59,6 +59,10 @@ int setVectorField(PyObject* pVFObj) {
 	root->tolf = rootTolF;
 	root->tolx = rootTolX;
 	return 1;
+}
+
+int setFunction(PyObject* pVFObj) {
+  return setVectorField(pVFObj); 
 }
 
 PyObject* PyListFromVector(const Vector& x) {

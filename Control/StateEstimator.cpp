@@ -1,6 +1,8 @@
 #include "StateEstimator.h"
+#include "JointSensors.h"
+#include "InertialSensors.h"
 #include "Simulation/ODERobot.h"
-#include <math/angle.h>
+#include <KrisLibrary/math/angle.h>
 
 void OmniscientStateEstimator::UpdateModel()
 {

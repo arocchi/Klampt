@@ -3,13 +3,17 @@
 #include "ODECustomGeometry.h"
 #include "Modeling/RigidObject.h"
 #include <ode/ode.h>
-#include <math/angle.h>
-#include <math3d/interpolate.h>
-#include <robotics/Rotation.h>
+#include <KrisLibrary/math/angle.h>
+#include <KrisLibrary/math3d/interpolate.h>
+#include <KrisLibrary/robotics/Rotation.h>
 #include "Settings.h"
 
 double ODERobot::defaultPadding = gDefaultRobotPadding;
+//k restitution of 0.1, friction of 1, infinite stiffness
 ODESurfaceProperties ODERobot::defaultSurface = {0.1,1.0,Inf,Inf};
+
+//defined in ODESimulator.cpp
+void* RobotIndexToGeomData(int robot,int link);
 
 //given inertia matrix Hc about c, returns inertia matrix around origin
 Matrix3 TranslateInertia(const Matrix3& Hc,const Vector3& c,Real mass)
@@ -95,7 +99,7 @@ bool ODERobot::SelfCollisionsEnabled() const
   else return false;
 }
 
-void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
+void ODERobot::Create(int robotIndex,dWorldID worldID,bool useBoundaryLayer)
 {
   Clear();
 
@@ -181,7 +185,7 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
 	Assert(indices[j] != baseLink);
 	Assert(robot.links[indices[j]].mass == 0.0);
 	Assert(robot.links[indices[j]].inertia.isZero());
-	Assert(robot.geometry[indices[j]].Empty());
+	Assert(robot.IsGeometryEmpty(indices[j]));
       }
     }
     if(bodyJoints[i].size()==1) { //single joint
@@ -190,9 +194,9 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
       bodyObjects[i].inertia = robot.links[baseLink].inertia;
       bodyObjects[i].T.R = robot.links[baseLink].T_World.R; 
       bodyObjects[i].T.t = robot.links[baseLink].T_World * robot.links[baseLink].com; 
-      if(!robot.geometry[baseLink].Empty()) {
+      if(!robot.IsGeometryEmpty(baseLink)) {
 	bodyGeometry[i] = new ODEGeometry;
-	bodyGeometry[i]->Create(&robot.geometry[baseLink],spaceID,-robot.links[baseLink].com,useBoundaryLayer);
+	bodyGeometry[i]->Create(robot.geometry[baseLink],spaceID,-robot.links[baseLink].com,useBoundaryLayer);
       }
     }
     else {
@@ -204,21 +208,24 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
       bodyObjects[i].inertia.setZero();
       for(size_t j=0;j<bodyLinks[i].size();j++) {
 	int link = bodyLinks[i][j];
-	if(robot.links[link].mass==0) continue;
-	bodyObjects[i].mass += robot.links[link].mass;
 	RigidTransform Trel;
 	Trel.mulInverseA(robot.links[baseLink].T_World,robot.links[link].T_World);
-	bodyObjects[i].com += robot.links[link].mass*(Trel*robot.links[link].com);
-	//transform inertia matrix
-	Matrix3 temp,inertiaLink;
-	temp.mulTransposeB(robot.links[link].inertia,Trel.R);
-	inertiaLink.mul(Trel.R,temp);
-	inertiaLink = TranslateInertia(inertiaLink,Trel.t,robot.links[link].mass);
-	bodyObjects[i].inertia += (inertiaLink*robot.links[link].mass);
+	if(robot.links[link].mass > 0) {
+	  bodyObjects[i].mass += robot.links[link].mass;
+	  bodyObjects[i].com += robot.links[link].mass*(Trel*robot.links[link].com);
+	  //transform inertia matrix
+	  Matrix3 temp,inertiaLink;
+	  temp.mulTransposeB(robot.links[link].inertia,Trel.R);
+	  inertiaLink.mul(Trel.R,temp);
+	  inertiaLink = TranslateInertia(inertiaLink,Trel.t,robot.links[link].mass);
+	  bodyObjects[i].inertia += (inertiaLink*robot.links[link].mass);
+	}
 
-	//get transformed mesh
-	meshes[j] = robot.geometry[link];
-	meshes[j].Transform(Trel);
+	if(!robot.IsGeometryEmpty(link)) {
+	  //get transformed mesh
+	  meshes[j] = Geometry::AnyGeometry3D(*robot.geometry[link]);
+	  meshes[j].Transform(Trel);
+	}
       }
       bodyObjects[i].com /= bodyObjects[i].mass;
       bodyObjects[i].inertia /= bodyObjects[i].mass;
@@ -230,7 +237,6 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
       tempGeometries.resize(tempGeometries.size()+1);
       tempGeometries.back() = new RobotWithGeometry::CollisionGeometry;
       tempGeometries.back()->Merge(meshes);
-      tempGeometries.back()->InitCollisions();
       if(!tempGeometries.back()->Empty()) {
 	bodyGeometry[i] = new ODEGeometry;
 	bodyGeometry[i]->Create(tempGeometries.back(),spaceID,-bodyObjects[i].com,useBoundaryLayer);
@@ -299,6 +305,10 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
     if(res != 1) {
       fprintf(stderr,"Uh... mass of body %d is not considered to be valid by ODE?\n",i);
       std::cerr<<"Inertia: "<<body.inertia<<std::endl;
+      body.inertia.setIdentity(); body.inertia *= 0.01;
+      CopyMatrix(mass.I,body.inertia);
+      fprintf(stderr,"Setting inertia to 0.01*identity. Press enter to continue...\n");
+      getchar();
     }
     dBodySetMass(bodyID[primaryLink],&mass);
 
@@ -306,7 +316,9 @@ void ODERobot::Create(dWorldID worldID,bool useBoundaryLayer)
     geometry[primaryLink] = bodyGeometry[i];    
     if(geometry[primaryLink] != NULL) {
       dGeomSetBody(geometry[primaryLink]->geom(),bodyID[primaryLink]);
-      dGeomSetData(geometry[primaryLink]->geom(),(void*)primaryLink);
+      dGeomSetData(geometry[primaryLink]->geom(),RobotIndexToGeomData(robotIndex,primaryLink));
+
+      //printf("Robot %d link %d GeomData set to %p\n",robotIndex,primaryLink,RobotIndexToGeomData(robotIndex,primaryLink));
       //set defaults
       geometry[primaryLink]->SetPadding(defaultPadding);
       geometry[primaryLink]->surf() = defaultSurface;
@@ -781,8 +793,16 @@ Real ODERobot::GetDriverValue(int driver) const
     {
       RigidTransform T;
       GetLinkTransform(d.linkIndices[1],T);
-      FatalError("What to do with rotation?");
-      return 0;
+      Vector3 axis = robot.links[d.linkIndices[0]].w;
+      EulerAngleRotation ea;
+      ea.setMatrixZYX(T.R);
+      if(axis.x == 1) return ea.z;
+      else if(axis.y == 1) return ea.y;
+      else if(axis.z == 1) return ea.x;
+      else {
+        fprintf(stderr,"ODERobot: Invalid axis for rotation driver, simulation will likely be unstable!\n");
+        return MatrixAngleAboutAxis(T.R,axis);
+      }
     }
     break;
   case RobotJointDriver::Affine: 
@@ -900,15 +920,21 @@ bool ODERobot::ReadState(File& f)
     dReal w[3],v[3];
     dReal pos[3];
     dReal q[4];
+    dReal frc[3];
+    dReal trq[3];
     if(!ReadArrayFile(f,pos,3)) return false;
     if(!ReadArrayFile(f,q,4)) return false;
     if(!ReadArrayFile(f,w,3)) return false;
     if(!ReadArrayFile(f,v,3)) return false;
+    if(!ReadArrayFile(f,frc,3)) return false;
+    if(!ReadArrayFile(f,trq,3)) return false;
 
     dBodySetPosition(bodyID[i],pos[0],pos[1],pos[2]);
     dBodySetQuaternion(bodyID[i],q);
     dBodySetLinearVel(bodyID[i],v[0],v[1],v[2]);
     dBodySetAngularVel(bodyID[i],w[0],w[1],w[2]);
+    dBodySetForce(bodyID[i],frc[0],frc[1],frc[2]);
+    dBodySetTorque(bodyID[i],trq[0],trq[1],trq[2]);
   }
 
   /*
@@ -940,11 +966,16 @@ bool ODERobot::WriteState(File& f) const
     const dReal* q=dBodyGetQuaternion(bodyID[i]);
     const dReal* v=dBodyGetLinearVel(bodyID[i]);
     const dReal* w=dBodyGetAngularVel(bodyID[i]);
+    //do we need this?
+    const dReal* frc=dBodyGetForce(bodyID[i]);
+    const dReal* trq=dBodyGetTorque(bodyID[i]);
 
     if(!WriteArrayFile(f,pos,3)) return false;
     if(!WriteArrayFile(f,q,4)) return false;
     if(!WriteArrayFile(f,w,3)) return false;
     if(!WriteArrayFile(f,v,3)) return false;
+    if(!WriteArrayFile(f,frc,3)) return false;
+    if(!WriteArrayFile(f,trq,3)) return false;
   }
   return true;
 }

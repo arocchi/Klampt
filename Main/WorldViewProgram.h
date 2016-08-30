@@ -1,14 +1,14 @@
 #ifndef WORLD_VIEW_PROGRAM_H
 #define WORLD_VIEW_PROGRAM_H
 
-#include <math3d/Ray3D.h>
+#include <KrisLibrary/math3d/Ray3D.h>
 #include "Modeling/World.h"
 #include "IO/XmlWorld.h"
-#include <GLdraw/GLUINavigationProgram.h>
-#include <GLdraw/GLScreenshotProgram.h>
-#include <GLdraw/GL.h>
-#include <GLdraw/drawextra.h>
-#include <GLdraw/Widget.h>
+#include <KrisLibrary/GLdraw/GLUINavigationProgram.h>
+#include <KrisLibrary/GLdraw/GLScreenshotProgram.h>
+#include <KrisLibrary/GLdraw/GL.h>
+#include <KrisLibrary/GLdraw/drawextra.h>
+#include <KrisLibrary/GLdraw/Widget.h>
 #include <GL/glui.h>
 #include <fstream>
 using namespace Math3D;
@@ -27,8 +27,8 @@ public:
     world->SetGLLights();
   }
   void ClickRay(int x,int y,Ray3D& r) const;
-  RobotInfo* ClickRobot(const Ray3D& r,int& body,Vector3& localpt) const;
-  RigidObjectInfo* ClickObject(const Ray3D& r,Vector3& localpt) const;
+  Robot* ClickRobot(const Ray3D& r,int& body,Vector3& localpt) const;
+  RigidObject* ClickObject(const Ray3D& r,Vector3& localpt) const;
   virtual void RefreshIdle() { SleepIdleCallback(0); }
   virtual void RenderWorld()
   {
@@ -112,11 +112,11 @@ bool WorldViewProgram::LoadCommandLine(int argc,const char** argv)
     Vector temp;
     in >> temp;
     if(!in) printf("Error reading config file %s\n",configs[i].c_str());
-    if(temp.n != (int)world->robots[i].robot->links.size()) {
+    if(temp.n != (int)world->robots[i]->links.size()) {
       printf("Incorrect number of DOFs in config %d\n",i);
       continue;
     }
-    world->robots[i].robot->UpdateConfig(temp);
+    world->robots[i]->UpdateConfig(temp);
   }
 
   return true;
@@ -128,8 +128,8 @@ class WorldViewWidget : public Widget
  public:
   RobotWorld* world;
   //click information
-  RobotInfo* clickedRobot;
-  RigidObjectInfo* clickedObject;
+  Robot* clickedRobot;
+  RigidObject* clickedObject;
   int body;
   Vector3 localpt;
 
@@ -140,15 +140,15 @@ class WorldViewWidget : public Widget
     Ray3D r;
     viewport.getClickSource(x,y,r.source);
     viewport.getClickVector(x,y,r.direction);
-    clickedRobot = world->ClickRobot(r,body,localpt);
+    clickedRobot = world->RayCastRobot(r,body,localpt);
     if(clickedRobot) {
-      Vector3 worldpt = clickedRobot->robot->links[body].T_World*localpt;
+      Vector3 worldpt = clickedRobot->links[body].T_World*localpt;
       distance = r.direction.dot(worldpt-r.source);
     }
     Vector3 localpt2;
-    clickedObject = world->ClickObject(r,localpt2);
+    clickedObject = world->RayCastObject(r,localpt2);
     if(clickedObject) {
-      Vector3 worldpt2 = clickedObject->object->T*localpt2;
+      Vector3 worldpt2 = clickedObject->T*localpt2;
       Real distance2 = r.direction.dot(worldpt2-r.source);      
       if(clickedRobot && distance < distance2) {
 	//robot is closest
@@ -188,7 +188,7 @@ bool WorldViewProgram::Initialize()
   camera.dist = 6;
   viewport.n = 0.1;
   viewport.f = 100;
-  viewport.setLensAngle(DtoR(30.0));
+  viewport.setLensAngle(DtoR(60.0));
 
   glEnable(GL_CULL_FACE);
   glEnable(GL_DEPTH_TEST);
@@ -206,14 +206,14 @@ void WorldViewProgram::ClickRay(int x,int y,Ray3D& r) const
 }
 
 
-RobotInfo* WorldViewProgram::ClickRobot(const Ray3D& r,int& body,Vector3& localpt) const
+Robot* WorldViewProgram::ClickRobot(const Ray3D& r,int& body,Vector3& localpt) const
 {
-  return world->ClickRobot(r,body,localpt);
+  return world->RayCastRobot(r,body,localpt);
 }
 
-RigidObjectInfo* WorldViewProgram::ClickObject(const Ray3D& r,Vector3& localpt) const
+RigidObject* WorldViewProgram::ClickObject(const Ray3D& r,Vector3& localpt) const
 {
-  return world->ClickObject(r,localpt);
+  return world->RayCastObject(r,localpt);
 }
 
 #endif

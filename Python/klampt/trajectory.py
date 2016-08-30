@@ -6,7 +6,9 @@
 """
 
 import bisect
-import vectorops
+import so3,se3,vectorops
+import spline
+from geodesic import *
 
 class Trajectory:
 	"""A basic piecewise-linear trajectory class, which can be overloaded
@@ -45,6 +47,20 @@ class Trajectory:
 			fout.write('\n')
 		fout.close()
 
+	def startTime(self):
+		"""Returns the initial time."""
+		try: return self.times[0]
+		except IndexError: return 0.0
+		
+	def endTime(self):
+		"""Returns the final time."""
+		try: return self.times[-1]
+		except IndexError: return 0.0
+
+	def duration(self):
+		"""Returns the duration of the trajectory."""
+		return self.endTime()-self.startTime()
+
 	def checkValid(self):
 		"""Checks whether this is a valid trajectory, raises a
 		ValueError if not."""
@@ -64,7 +80,8 @@ class Trajectory:
 	def getSegment(self,t,endBehavior='halt'):
 		"""Returns the index and interpolation parameter for the
 		segment at time t.  If endBehavior='loop' then the trajectory
-		loops forver."""
+		loops forver.  O(log n) time where n is the number of
+		segments."""
 		if len(self.times)==0:
 			raise ValueError("Empty trajectory")
 		if len(self.times)==1:
@@ -106,14 +123,14 @@ class Trajectory:
 		i,u = self.getSegment(t,endBehavior)
 		if i<0: return [0.0]*len(self.milestones[0])
 		elif i>=len(self.milestones): return [0.0]*len(self.milestones[-1])
-		return vectorops.mul(self.difference(self.milestones[i+1],self.milestones[i]),1.0/(self.times[i+1]-self.times[i]))
+		return vectorops.mul(self.difference(self.milestones[i+1],self.milestones[i],u),1.0/(self.times[i+1]-self.times[i]))
 
 	def interpolate(self,a,b,u):
 		"""Can override this to implement non-cartesian spaces.
 		Interpolates along the geodesic from a to b."""
 		return vectorops.interpolate(a,b,u)
 	
-	def difference(self,a,b):
+	def difference(self,a,b,u):
 		"""Subclasses can override this to implement non-Cartesian
 		spaces.  Returns the derivative along the geodesic from b to
 		a."""
@@ -151,26 +168,27 @@ class Trajectory:
 					#discard last milestone of self
 					times = self.times[:-1] + [t+offset for t in suffix.times]
 					milestones = self.milestones[:-1] + suffix.milestones
-					return Trajectory(times,milestones)
+					return self.constructor()(times,milestones)
 		times = self.times + [t+offset for t in suffix.times]
 		milestones = self.milestones + suffix.milestones
-		return Trajectory(times,milestones)
+		return self.constructor()(times,milestones)
 
 	def split(self,time):
-		"""Returns two trajectories split at the given time"""
+		"""Returns a pair of trajectories obtained from splitting this
+		one at the given time"""
 		i,u = self.getSegment(time)
 		if time < 0:
-			return Trajectory(),Trajectory()
+			return self.constructor()(),self.constructor()()
 		if time <= self.times[0]:
 			#split before start of trajectory
-			return Trajectory([time],[self.milestones[0]]),Trajectory([time]+self.times,[self.milestones[0]]+self.milestones)
+			return self.constructor()([time],[self.milestones[0]]),self.constructor()([time]+self.times,[self.milestones[0]]+self.milestones)
 		if time >= self.times[-1]:
 			#split after end of trajectory
-			return Trajectory(self.times+[time],self.milestones+[self.milestones[-1]]),trajectory([time],self.milestones[-1])
+			return self.constructor()(self.times+[time],self.milestones+[self.milestones[-1]]),trajectory([time],self.milestones[-1])
 		#split in middle of trajectory
 		splitpt = self.interpolate(self.milestones[i],self.milestones[i+1],u)
-		front = Trajectory(self.times[:i+1],self.milestones[:i+1])
-		back = Trajectory(self.times[i+1:],self.milestones[i+1:])
+		front = self.constructor()(self.times[:i+1],self.milestones[:i+1])
+		back = self.constructor()(self.times[i+1:],self.milestones[i+1:])
 		if u > 0:
 			front.times.append(time)
 			front.milestones.append(splitpt)
@@ -193,13 +211,18 @@ class Trajectory:
 		suffix(t0)=path(t0) where t0 is the absolute start time
 		of the suffix."""
 		offset = 0
-		if time==None:
+		if time is None:
 			time = suffix.times[0]
 		if relative and len(self.times) > 0:
 			offset = self.times[-1]
 		time = time+offset
 		before = self.before(time)
 		return before.concat(suffix,relative,jumpPolicy)
+	def constructor(self):
+		"""Returns a "standard" constructor for the split / concat
+		routines.  The result should be a function that takes two
+		arguments: a list of times and a list of milestones."""
+		return Trajectory
 
 class RobotTrajectory(Trajectory):
 	"""A trajectory that performs interpolation according to the robot's
@@ -209,11 +232,106 @@ class RobotTrajectory(Trajectory):
 		self.robot = robot
 	def interpolate(self,a,b,u):
 		return self.robot.interpolate(a,b,u)
-	def difference(self,a,b):
+	def difference(self,a,b,u):
 		return self.robot.interpolate_deriv(b,a)
+	def constructor(self):
+		return lambda time,milestones: RobotTrajectory(self.robot,time,milestones)
+
+class GeodesicTrajectory(Trajectory):
+	"""A trajectory that performs interpolation on a GeodesicSpace.
+	See klampt.geodesic for more information."""
+	def __init__(self,geodesic,times=[],milestones=[]):
+		self.geodesic = geodesic
+		Trajectory.__init__(self,times,milestones)
+	def interpolate(self,a,b,u):
+		return self.geodesic.interpolate(a,b,u)
+	def difference(self,a,b,u):
+		if u > 0.5:
+			#do this from the b side
+			return vectorops.mul(self.difference(b,a,1.0-u),-1.0)
+		x = self.interpolate(a,b,u)
+		return vectorops.mul(self.geodesic.difference(x,b),1.0/(1.0-u))
+	def constructor(self):
+		return lambda times,milestones:GeodesicTrajectory(self.geodesic,times,milestones)
+
+class SO3Trajectory(GeodesicTrajectory):
+	"""A trajectory that performs interpolation in SO3.  Each milestone
+	is a 9-D klampt.so3 element."""
+	def __init__(self,times=[],milestones=[]):
+		GeodesicTrajectory.__init__(self,SO3Space(),times,milestones)
+	def preTransform(self,R):
+		"""Premultiplies every rotation in here by the so3 element
+		R. In other words, if R rotates a local frame F to frame F',
+		this method converts this SO3Trajectory from coordinates in F
+		to coordinates in F'"""
+		for i,m in enumerate(self.milestones):
+			self.milestones[i] = so3.mul(R,m)
+	def postTransform(self,R):
+		"""Postmultiplies every rotation in here by the se3 element
+		R. In other words, if R rotates a local frame F to frame F',
+		this method converts this SO3Trajectory from describing how F'
+		rotates to how F rotates."""
+		for i,m in enumerate(self.milestones):
+			self.milestones[i] = se3.mul(m,T)
+	def constructor(self):
+		return SO3Trajectory
+
+class SE3Trajectory(GeodesicTrajectory):
+	"""A trajectory that performs interpolation in SE3.  Each milestone
+	is a 12-D flattened klampt.se3 element (i.e., the concatenation of
+	R + t for an (R,t) pair)."""
+	def __init__(self,times=[],milestones=[]):
+		"""Constructor can take either a list of SE3 elements or
+		12-element vectors."""
+		if len(milestones) > 0 and len(milestones[0])==2:
+			GeodesicTrajectory.__init__(self,SE3Space(),times,[m[0]+m[1] for m in milestones])
+		else:
+			GeodesicTrajectory.__init__(self,SE3Space(),times,milestones)
+	def eval_se3(self,t,endBehavior='halt'):
+		"""Returns an SE3 element"""
+		res = self.eval(t,endBehavior)
+		return (res[:9],res[9:])
+	def deriv_se3(self,t,endBehavior='halt'):
+		"""Returns the derivative as the derivatives of an SE3
+		element"""
+		res = self.deriv(t,endBehavior)
+		return (res[:9],res[9:])
+	def preTransform(self,T):
+		"""Premultiplies every transform in here by the se3 element
+		T. In other words, if T transforms a local frame F to frame F',
+		this method converts this SE3Trajectory from coordinates in F
+		to coordinates in F'"""
+		for i,m in enumerate(self.milestones):
+			Tm = (m[:9],m[9:])
+			self.milestones[i] = se3.mul(T,Tm)
+	def postTransform(self,T):
+		"""Postmultiplies every transform in here by the se3 element
+		T. In other words, if T transforms a local frame F to frame F',
+		this method converts this SE3Trajectory from describing how F'
+		moves to how F moves."""
+		for i,m in enumerate(self.milestones):
+			Tm = (m[:9],m[9:])
+			self.milestones[i] = se3.mul(Tm,T)
+	def getRotationTrajectory(self):
+		"""Returns an SO3Trajectory describing the rotation
+		trajectory."""
+		return SO3Trajectory(times,[m[:9] for m in self.milestones])
+	def getPositionTrajectory(self,localPt=None):
+		"""Returns a Trajectory describing the movement of the given
+		local point localPt (or the origin, if none is provided)."""
+		if localPt is None:
+			return Trajectory(times,[m[9:] for m in self.milestones])
+		else:
+			return Trajectory(times,[se3.apply((m[:9],m[9:]),localPt) for m in self.milestones])
+	def constructor(self):
+		return SE3Trajectory
 
 class HermiteTrajectory(Trajectory):
 	"""A trajectory whose milestones are given in phase space (x,dx).
+	
+	eval(t) is overloaded to just get the configuration, and deriv(t) is
+	overloaded to just get the velocity.  To obtain state, use
+	eval_state(t).  To get acceleration, use eval_accel(t).
 	"""
 	def __init__(self,times=[],milestones=[],dmilestones=None):
 		"""If dmilestones is given, then milestones is interpreted
@@ -221,12 +339,13 @@ class HermiteTrajectory(Trajectory):
 		
 		Otherwise, the milestones are interpreted as states (x,dx)
 		"""
-		if dmilestones==None:
+		if dmilestones is None:
 			Trajectory.__init__(self,times,milestones)
 		else:
 			#interpret as config/velocity
 			self.times = times
 			self.milestones = [q+dq for (q,dq) in zip(milestones,dmilestones)]
+
 	def makeSpline(self,waypointTrajectory):
 		"""Computes natural velocities for a standard configuration-
 		space Trajectory to make it smoother."""
@@ -245,70 +364,156 @@ class HermiteTrajectory(Trajectory):
 				velocities.append(v)
 			#start velocity as quadratic
 			x2 = vectorops.madd(t.milestones[1],velocities[0],-1.0/3.0)
-			x1 = vectorops.madd(x2,vectorops.sub(t.milestones[1],t.milestones[0],-1.0/3.0))
+			x1 = vectorops.madd(x2,vectorops.sub(t.milestones[1],t.milestones[0]),-1.0/3.0)
 			v0 = vectorops.mul(vectorops.sub(x1,t.milestones[0]),3.0)
 			#terminal velocity as quadratic
 			xn_2 = vectorops.madd(t.milestones[-2],velocities[-1],1.0/3.0)
-			xn_1 = vectorops.madd(xn_2,vectorops.sub(t.milestones[-1],t.milestones[-2],1.0/3.0))
+			xn_1 = vectorops.madd(xn_2,vectorops.sub(t.milestones[-1],t.milestones[-2]),1.0/3.0)
 			vn = vectorops.mul(vectorops.sub(t.milestones[-1],xn_1),3.0)
 			velocities = [v0]+velocities+[vn]
 		self.__init__(waypointTrajectory.times[:],waypointTrajectory.milestones,velocities)
 
+	def eval(self,t,endBehavior='halt'):
+		"""Returns just the configuration component of the result"""
+		res = Trajectory.eval(self,t,endBehavior)
+		return res[:len(res)/2]
+
+	def deriv(self,t,endBehavior='halt'):
+		"""Returns the derivative of configuration"""
+		res = Trajectory.eval(self,t,endBehavior)
+		return res[len(res)/2:]
+
+	def eval_state(self,t,endBehavior='halt'):
+		"""Returns the (configuration,velocity) state at time t."""
+		return Trajectory.eval(self,t,endBehavior)
+
 	def eval_config(self,t,endBehavior='halt'):
 		"""Returns just the configuration component of the result"""
-		res = self.eval(t,endBehavior)
+		res = Trajectory.eval(self,t,endBehavior)
 		return res[:len(res)/2]
 	
 	def eval_velocity(self,t,endBehavior='halt'):
 		"""Returns just the velocity component of the result"""
-		res = self.eval(t,endBehavior)
+		res = Trajectory.eval(self,t,endBehavior)
 		return res[len(res)/2:]
 
 	def eval_accel(self,t,endBehavior='halt'):
-		"""Returns just the acceleration component of the result"""
-		res = self.deriv(t,endBehavior)
+		"""Returns just the acceleration component of the derivative"""
+		res = Trajectory.deriv(self,t,endBehavior)
 		return res[len(res)/2:]
 
 	def interpolate(self,a,b,u):
+		assert len(a)==len(b)
 		x1,v1 = a[:len(a)/2],a[len(a)/2:]
 		x2,v2 = b[:len(b)/2],b[len(b)/2:]
-		assert len(a)==len(b)
-		assert len(x1)==len(v1)
-		u2 = u*u
-		u3 = u*u*u
-		cx1 = 2.0*u3-3.0*u2+1.0
-		cx2 = -2.0*u3+3.0*u2
-		cv1 = (u3-2.0*u2+u)
-		cv2 = (u3-u2)
-		dcx1 = (6.0*u2-6.0*u)
-		dcx2 = (-6.0*u2+6.0*u)
-		dcv1 = 3.0*u2-4.0*u+1.0
-		dcv2 = 3.0*u2-2.0*u
-		x = [0]*len(x1)
-		dx = [0]*len(x1)
-		for i in xrange(len(x1)):
-			x[i] = cx1*x1[i] + cx2*x2[i] + cv1*v1[i] + cv2*v2[i]
-			dx[i] = dcx1*x1[i] + dcx2*x2[i] + dcv1*v1[i] + dcv2*v2[i];
+		x = spline.hermite_eval(x1,v1,x2,v2,u)
+		dx = spline.hermite_deriv(x1,v1,x2,v2,u)
 		return x+dx
 	
-	def difference(self,a,b):
+	def difference(self,a,b,u):
+		assert len(a)==len(b)
 		x1,v1 = a[:len(a)/2],a[len(a)/2:]
 		x2,v2 = b[:len(b)/2],b[len(b)/2:]
-		assert len(a)==len(b)
-		assert len(x1)==len(v1)
-		u2 = u*u
-		dcx1 = (6.0*u2-6.0*u)
-		dcx2 = (-6.0*u2+6.0*u)
-		dcv1 = 3.0*u2-4.0*u+1.0
-		dcv2 = 3.0*u2-2.0*u
-		ddcx1 = 12*u
-		ddcx2 = -12.0*u
-		ddcv1 = 6.0*u-4.0
-		ddcv2 = 6.0*u-2.0
-		dx = [0]*len(x1)
-		ddx = [0]*len(x1)
-		for i in xrange(len(x1)):
-			dx[i] = dcx1*x1[i] + dcx2*x2[i] + dcv1*v1[i] + dcv2*v2[i]
-			ddx[i] = ddcx1*x1[i] + ddcx2*x2[i] + ddcv1*v1[i] + ddcv2*v2[i]
+		dx = spline.hermite_deriv(x1,v1,x2,v2,u,order=1)
+		ddx = spline.hermite_deriv(x1,v1,x2,v2,u,order=2)
 		return dx+ddx
 
+	def constructor(self):
+		return HermiteTrajectory
+
+
+def execute_path(path,controller,speed=1.0,smoothing=None,activeDofs=None):
+	"""Sends an untimed trajectory on a controller.
+	
+	Arguments:
+	- path: a list of milestones
+	- controller: a SimRobotController
+	- smoothing: any smoothing applied to the path.  Valid values are:
+	  * None: starts / stops at each milestone, moves in linear joint-space paths
+	  * 'spline': interpolates milestones smoothly with some differenced velocity
+	  * 'ramp': starts / stops at each milestone, moves in minimum-time / minimum-
+	    acceleration paths.
+	- activeDofs: if not None, a list of dofs that are moved by the trajectory.  Each
+	  entry may be an integer or a string.
+	"""
+	if activeDofs is not None:
+		indices = [controller.model().link(d).getIndex for d in activeDofs]
+		q0 = controller.getCommandedConfig()
+		liftedMilestones = []
+		for m in path:
+			assert(len(m)==len(indices))
+			q = q0[:]
+			for i,v in zip(indices,m):
+				q[i] = v
+			liftedMilestones.append(q)
+		return execute_path(liftedMilestones,controller,speed,smoothing)
+
+	if smoothing == None:
+		controller.setMilestone(path[0])
+		for i in range(1,len(path)):
+			controller.addMilestoneLinear(path[i])
+	elif smoothing == 'spline':
+		raise NotImplementedError("Spline interpolation")
+	elif smoothing == 'ramp':
+		controller.setMilestone(path[0])
+		for i in range(1,len(path)):
+			controller.addMilestone(path[i])
+	else:
+		raise ValueError("Invalid smoothing method specified")
+
+def execute_trajectory(trajectory,controller,speed=1.0,smoothing=None,activeDofs=None):
+	"""Sends a timed trajectory to a controller.
+
+	Arguments:
+	- trajectory: a Trajectory, RobotTrajectory, or HermiteTrajectory instance
+	- controller: a SimRobotController
+	- smoothing: any smoothing applied to the path.  Only valid for piecewise
+	  linear trajectories.  Valid values are
+	  * None: no smoothing, just do a piecewise linear trajectory
+	  * 'spline': interpolate tangents to the curve
+	  * 'pause': smoothly speed up and slow down
+	- activeDofs: if not None, a list of dofs that are moved by the trajectory.  Each
+	  entry may be an integer or a string.
+	"""
+	if activeDofs is not None:
+		indices = [controller.model().link(d).getIndex for d in activeDofs]
+		q0 = controller.getCommandedConfig()
+		liftedMilestones = []
+		assert not isinstance(trajectory,HermiteTrajectory),"TODO: hermite trajectory lifting"
+		for m in trajectory.milestones:
+			assert(len(m)==len(indices))
+			q = q0[:]
+			for i,v in zip(indices,m):
+				q[i] = v
+			liftedMilestones.append(q)
+		tfull = trajectory.constructor()(trajectory.times,liftedMilestones)
+		return execute_trajectory(tfull,controller,speed,smoothing)
+
+	if isinstance(trajectory,HermiteTrajectory):
+		assert smoothing == None,"Smoothing cannot be applied to hermite trajectories"
+		ts = trajectory.startTime()
+		controller.setMilestone(trajectory.eval(ts),trajectory.deriv(ts))
+		n = len(trajectory.milestones[0])/2
+		for i in range(1,len(trajectory.times)):
+			q,v = trajectory.milestones[i][:n],trajectory.milestones[i][n:]
+			controller.addCubic(q,v,(trajectory.times[i]-trajectory.times[i-1])/speed)
+	else:
+		if smoothing == None:
+			ts = trajectory.startTime()
+			controller.setMilestone(trajectory.eval(ts))
+			for i in range(1,len(trajectory.times)):
+				q = trajectory.milestones[i]
+				controller.addLinear(q,(trajectory.times[i]-trajectory.times[i-1])/speed)
+		elif smoothing == 'spline':
+			t = HermiteTrajectory()
+			t.makeSpline(trajectory)
+			return execute_trajectory(t,controller)
+		elif smoothing == 'pause':
+			ts = trajectory.startTime()
+			controller.setMilestone(trajectory.eval(ts))
+			zero = [0.0]*len(trajectory.milestones[0])
+			for i in range(1,len(trajectory.times)):
+				q = trajectory.milestones[i]
+				controller.addCubic(q,zero,(trajectory.times[i]-trajectory.times[i-1])/speed)
+		else:
+			raise ValueError("Invalid smoothing method specified")

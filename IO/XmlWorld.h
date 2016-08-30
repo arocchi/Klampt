@@ -9,18 +9,17 @@ class XmlRobot
  public:
   XmlRobot(TiXmlElement* element,string path=string());
   bool GetRobot(Robot& robot);
-  //void GetController();
 
   TiXmlElement* e;
   string path;
 };
 
+
 class XmlRigidObject
 {
  public:
   XmlRigidObject(TiXmlElement* element,string path=string());
-  bool GetObject(RigidObject& object);
-  //void GetGraspGenerator();
+  bool GetRigidObject(RigidObject& object);
 
   TiXmlElement* e;
   string path;
@@ -30,7 +29,7 @@ class XmlTerrain
 {
  public:
   XmlTerrain(TiXmlElement* element,string path=string());
-  bool GetTerrain(Environment& env);
+  bool GetTerrain(Terrain& env);
 
   TiXmlElement* e;
   string path;

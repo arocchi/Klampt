@@ -6,6 +6,89 @@ from robotsim import *
 import se3
 
 
+def bb_intersect(a,b):
+    """Returns true if the bounding boxes (a[0]->a[1]) and (b[0]->b[1]) intersect"""
+    amin,amax=a
+    bmin,bmax=b
+    for i in xrange(len(amin)):
+        if amax[i] < bmin[i] or bmax[i] < amin[i]:
+            return False
+    return True
+
+def self_collision_iter(geomlist,pairs='all'):
+    """For a list of Geometry3D's, performs efficient self collision testing.
+    Yields an iterator over pairs (i,j) where i and j are indices
+    of the colliding geometries.
+
+    If pairs == 'all', all pairs are tested.  If it's a function, it's
+    a 2-argument function taking geometry indices and returning true if 
+    they should be tested.  Otherwise it can be a list of collision indices.
+
+    Uses a quick bounding box reject test."""
+    bblist = [g[1].getBB() for g in geomlist]
+    if pairs=='all':
+        for i,g in enumerate(geomlist):
+            for j in range(i+1,len(geomlist)):
+                if not bb_intersect(bblist[i],bblist[j]): continue
+                g2 = geomlist[j]
+                if g.collides(g2):
+                    yield (i,j)
+    elif callable(pairs):
+        for i,g in enumerate(geomlist):
+            for j in range(i+1,len(geomlist)):
+                if not pairs(i,j): continue
+                if not bb_intersect(bblist[i],bblist[j]): continue
+                g2 = geomlist[j]
+                if g.collides(g2):
+                    yield (i,j)
+    else:
+        for (i,j) in pairs:
+            if not bb_intersect(bblist[i],bblist[j]): continue
+            g  =geomlist[i]
+            g2 = geomlist[j]
+            if g.collides(g2):
+                yield (i,j)
+
+def group_collision_iter(geomlist,alist,blist,pairs='all'):
+    """Tests whether two subsets of geometries collide.
+
+    If pairs == 'all', all pairs are tested.  If it's a function, it's
+    a 2-argument function taking geometry indices and returning true if 
+    they should be tested.  Otherwise it can be a list of collision indices.
+
+    Uses a quick bounding box reject test.
+    """
+    bblist = [None]*len(geomlist)
+    for id in alist:
+        bblist[id] = geomlist[id].getBB()
+    for id in blist:
+        if bblist[id] is not None:
+            bblist[id] = geomlist[id].getBB()
+    if pairs=='all':
+        for i in alist:
+            for j in blist:
+                if not bb_intersect(bblist[i],bblist[j]): continue
+                g = geomlist[i]
+                g2 = geomlist[j]
+                if g.collides(g2):
+                    yield (i,j)
+    elif callable(pairs):
+        for i in alist:
+            for j in blist:
+                if not pairs(i,j): continue
+                if not bb_intersect(bblist[i],bblist[j]): continue
+                g = geomlist[i]
+                g2 = geomlist[j]
+                if g.collides(g2):
+                    yield (i,j)
+    else:
+        for (i,j) in pairs:
+            if not bb_intersect(bblist[i],bblist[j]): continue
+            g  =geomlist[i]
+            g2 = geomlist[j]
+            if g.collides(g2):
+                yield (i,j)
+
 
 class WorldCollider:
     """
@@ -20,6 +103,8 @@ class WorldCollider:
 
     Methods:
       - getGeom(obj): finds the geometry corresponding to an object
+      - ignoreCollision(obj or obj pair): ignores collisions corresponding to
+        an object or pair of objects
       - collisionTests(filter1,filter2): returns an iterator over potential
         colliding pairs
       - collisions(filter1,filter2): yields an iterator over collision pairs
@@ -37,10 +122,11 @@ class WorldCollider:
         first robot link intersected by a ray
     """
     
-    def __init__(self,world):
+    def __init__(self,world,ignore=[]):
         """Initializes the collision detection structure given a WorldModel
         as input."""
-        
+
+        world.enableInitCollisions(True)
         self.world = world
         #a list of (object,geom) pairs
         self.geomList = []
@@ -54,7 +140,7 @@ class WorldCollider:
         for i in xrange(world.numTerrains()):
             t = world.terrain(i)
             g = t.geometry()
-            if g != None:
+            if g != None and g.type()!="":
                 self.terrains.append(len(self.geomList))
                 self.geomList.append((t,g))
             else:
@@ -62,7 +148,7 @@ class WorldCollider:
         for i in xrange(world.numRigidObjects()):
             o = world.rigidObject(i)
             g = o.geometry()
-            if g != None:
+            if g != None and g.type()!="":
                 self.rigidObjects.append(len(self.geomList))
                 self.geomList.append((o,g))
             else:
@@ -71,9 +157,9 @@ class WorldCollider:
             r = world.robot(i)
             self.robots.append([])
             for j in xrange(r.numLinks()):
-                l = r.getLink(j)
+                l = r.link(j)
                 g = l.geometry()
-                if g != None:
+                if g != None and g.type()!="":
                     self.robots[-1].append(len(self.geomList))
                     self.geomList.append((l,g))
                 else:
@@ -118,13 +204,16 @@ class WorldCollider:
                         self.mask[l1].add(l2)
                         self.mask[l2].add(l1)
             #robot self-collision
-            rob = self.geomList[r[0]][0].getRobot()
+            rob = self.geomList[r[0]][0].robot()
             nl = rob.numLinks()
             for i in xrange(nl):
                 for j in xrange(i):
                     if rob.selfCollisionEnabled(i,j):
                         self.mask[r[i]].add(r[j])
                         self.mask[r[j]].add(r[i])
+                        
+        for i in ignore:
+            self.ignoreCollisions(i)
                 
     def getGeom(self,object):
         for (o,g) in self.geomList:
@@ -132,7 +221,30 @@ class WorldCollider:
                 return g
         return None
 
-    def collisionTests(self,filter1=None,filter2=None):
+
+    def ignoreCollision(self,ign):
+        """Permanently removes an object or a pair of objects from
+        consideration.
+        ign can be either a single body in the world or a pair of bodies."""
+        if hasattr(ign,'__iter__'):
+            (a,b) = ign
+            ageom = self.getGeom(a)
+            bgeom = self.getGeom(b)
+            if ageom == None or bgeom == None:
+                raise ValueError("Invalid ignore collision item, must be a body in the world")
+            self.mask[ageom].discard(bgeom)
+            self.mask[bgeom].discard(ageom)
+        else:
+            #ignore all collisions with the given geometry
+            geom = self.getGeom(ign)
+            if geom == None:
+                raise ValueError("Invalid ignore collision item, must be a body in the world")
+            for i in self.mask[geom]:
+                #remove it from the list
+                self.mask[i].discard(geom)
+            self.mask[geom]=set()
+
+    def collisionTests(self,filter1=None,filter2=None,bb_reject=True):
         """Iterates over ((object,geom),(object,geom)) pairs indicating
         which objects should be tested for collision.  The geom objects
         will be instances of Geometry3D.
@@ -149,15 +261,24 @@ class WorldCollider:
 
         See collisions for a description of the filter1 and
         filter2 arguments.
+
+        The argument bb_reject should be true if we should quick reject
+        objects whose bounding boxes are not overlapping (broad phase
+        collision detection).  Otherwise, it should be false.
         """
         res = []
-        if filter1 == None:
+        if filter1 == None: #all pairs
+            if bb_reject: bblist = [g[1].getBB() for g in self.geomList]
             for (i,(g,objs)) in enumerate(zip(self.geomList,self.mask)):
                 for objIndex in objs:
                     #already checked
                     if objIndex < i: continue
+                    if bb_reject and not bb_intersect(bblist[i],bblist[objIndex]): continue
                     yield (g,self.geomList[objIndex])
-        elif filter2 == None:
+        elif filter2 == None: #self collision with objects passing filter1
+            if bb_reject:
+                #TODO: bounding box rejection, if requested
+                pass
             for (i,(g,objs)) in enumerate(zip(self.geomList,self.mask)):
                 if not filter1(g[0]): continue
                 for objIndex in objs:
@@ -165,7 +286,7 @@ class WorldCollider:
                     if objIndex < i: continue
                     if not filter1(self.geomList[objIndex][0]): continue
                     yield (g,self.geomList[objIndex])
-        else:
+        else:  #checks everything
             for (i,(g,objs)) in enumerate(zip(self.geomList,self.mask)):
                 f1 = filter1(g[0])
                 f2 = filter2(g[0])
@@ -191,7 +312,8 @@ class WorldCollider:
 
         If filter1 and filter2 are provided, then objects that
         satisfy filter1 will be collided against objects that satisfy
-        filter2.  (Note: in this case there is no checking of duplicates)."""
+        filter2.  (Note: in this case there is no checking of duplicates,
+        i.e., the sets should be disjoint to avoid duplicating work)."""
         for (g0,g1) in self.collisionTests(filter1,filter2):
             if g0[1].collides(g1[1]):
                 yield (g0[0],g1[0])

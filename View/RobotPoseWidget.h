@@ -1,9 +1,9 @@
 #ifndef ROBOT_POSE_WIDGET_H
 #define ROBOT_POSE_WIDGET_H
 
-#include <GLdraw/Widget.h>
-#include <GLdraw/TransformWidget.h>
-#include <robotics/IK.h>
+#include <KrisLibrary/GLdraw/Widget.h>
+#include <KrisLibrary/GLdraw/TransformWidget.h>
+#include <KrisLibrary/robotics/IK.h>
 #include "ViewRobot.h"
 
 /* @defgroup View
@@ -26,7 +26,10 @@ public:
   RobotLinkPoseWidget();
   RobotLinkPoseWidget(Robot* robot,ViewRobot* viewRobot);
   virtual ~RobotLinkPoseWidget() {}
+  ///Initializer
   void Set(Robot* robot,ViewRobot* viewRobot);
+  ///Sets the active dofs
+  void SetActiveDofs(const vector<int>& activeDofs);
   virtual bool Hover(int x,int y,Camera::Viewport& viewport,double& distance);
   virtual bool BeginDrag(int x,int y,Camera::Viewport& viewport,double& distance);
   virtual void Drag(int dx,int dy,Camera::Viewport& viewport);
@@ -37,6 +40,7 @@ public:
   Config poseConfig;
   GLDraw::GLColor highlightColor;
   int hoverLink,affectedLink,affectedDriver;
+  vector<int> activeDofs;
   vector<int> highlightedLinks;
   Vector3 hoverPt;
   bool draw;
@@ -95,6 +99,8 @@ public:
   ///if there are multiple solutions for the current pose, picks the one that
   ///most closely matches qref (useful for spin joints)
   Config Pose_Conditioned(const Config& qref) const;
+  ///Enables / disables editing certain joints
+  void SetActiveDofs(const vector<int>& activeDofs) { linkPoser.SetActiveDofs(activeDofs); }
   ///Adds a pos/rot constraint on the currently hovered link
   bool FixCurrent();
   ///Adds a point constraint on the currently hovered link

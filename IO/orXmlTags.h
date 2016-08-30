@@ -11,8 +11,8 @@
 #include <vector>
 #include <string>
 #include <tinyxml.h>
-#include <math3d/primitives.h>
-#include <utils/stringutils.h>
+#include <KrisLibrary/math3d/primitives.h>
+#include <KrisLibrary/utils/stringutils.h>
 #include "PrimitiveShape.h"
 #include "Constants.h"
 using namespace Math3D;
@@ -36,8 +36,8 @@ void axisAngle2RotationMat(const Vector4& aa, Matrix3& mat);
 void quat2RotationMat(const Vector4& aa, Matrix3& mat);
 void rotationMat2RPY(const Matrix3& mat, Vector3& vec);
 
-TiXmlElement* getFirstChild(TiXmlElement* e, char* value);
-TiXmlElement* getNextSibling(TiXmlElement* e, char* value);
+TiXmlElement* getFirstChild(TiXmlElement* e, const char* value);
+TiXmlElement* getNextSibling(TiXmlElement* e, const char* value);
 bool hasTransformation(TiXmlElement* e);
 
 class OrXmlTransformation {

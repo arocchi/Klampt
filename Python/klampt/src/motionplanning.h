@@ -65,8 +65,27 @@ void setPlanSetting(const char* setting,const char* value);
 ///Performs cleanup of all created spaces and planners
 void destroy();
 
-/** @brief A raw interface for a configuration space.  The CSpace interface
- * in cspace.py is easier to use.
+/** @brief A raw interface for a configuration space.  Note: the native
+ * Python CSpace interface class in cspace.py is easier to use.
+ *
+ * You can either set a single feasibility test function using setFeasibility()
+ * or add several feasibility tests, all of which need to be satisfied, using
+ * addFeasibilityTest().  In the latter case, planners may be able to provide
+ * debugging statistics, solve Minimum Constraint Removal problems, run faster
+ * by eliminating constraint tests, etc.
+ *
+ * Either setVisibility() or setVisibilityEpsilon() must be called to define
+ * a visibility checker between two (feasible) configurations.  In the 
+ * latter case, the path will be discretized at the resolution sent to
+ * setVisibilityEpsilon.  If you have special single-constraint visibility
+ * tests, you can call that using addVisibilityTest (for example, for convex
+ * constraints you can set it to the lambda function that returns true
+ * regardless of its arguments).
+ *
+ * Supported properties include "euclidean" (boolean), "metric" (string),
+ * "geodesic" (boolean), "minimum" (vector), and "maximum" (vector). 
+ * These may be used by planners to make planning faster or more accurate.
+ * For a complete list see KrisLibrary/planning/CSpace.h.
  */
 class CSpaceInterface
 {
@@ -76,13 +95,27 @@ class CSpaceInterface
   ~CSpaceInterface();
   void destroy();
   void setFeasibility(PyObject* pyFeas);
+  void addFeasibilityTest(const char* name,PyObject* pyFeas);
   void setVisibility(PyObject* pyVisible);
+  void addVisibilityTest(const char* name,PyObject* pyVisible);
   void setVisibilityEpsilon(double eps);
   void setSampler(PyObject* pySamp);
   void setNeighborhoodSampler(PyObject* pySamp);
   void setDistance(PyObject* pyDist);
   void setInterpolate(PyObject* pyInterp);
   void setProperty(const char* key,const char* value);
+  const char* getProperty(const char* key);
+
+  ///queries
+  bool isFeasible(PyObject* q);
+  bool isVisible(PyObject* a,PyObject* b);
+  bool testFeasibility(const char* name,PyObject* q);
+  bool testVisibility(const char* name,PyObject* a,PyObject* b);
+  PyObject* feasibilityFailures(PyObject* q);
+  PyObject* visibilityFailures(PyObject* a,PyObject* b);
+  PyObject* sample();
+  double distance(PyObject* a,PyObject* b);
+  PyObject* interpolate(PyObject* a,PyObject* b,double u);
 
   int index;
 };
@@ -93,9 +126,18 @@ class CSpaceInterface
  * On construction, uses the planner type specified by setPlanType
  * and the settings currently specified by calls to setPlanSetting.
  *
- * Point-to-point planning is enabled using the setEndpoints method.
- * This is mandatory for RRT and SBL planners.  The start and end
+ * Point-to-point planning is enabled by sending two configurations to
+ * the setEndpoints method.
+ * This is mandatory for RRT and SBL-style planners.  The start and end
  * milestones are given by indices 0 and 1, respectively
+ *
+ * Point-to-set planning is enabled by sending a *goal test* as
+ * the second argument to the setEndpoints method.  It is possible also
+ * to send a special goal sampler by providing a *pair of functions* as the
+ * second argument consisting of the two functions (goaltest,goalsample).
+ * The first in this pair  tests whether a configuration is a goal, and
+ * the second returns a sampled configuration in a superset of the goal.
+ * Ideally the goal sampler generates as many goals as possible.
  *
  * PRM can be used in either point-to-point or multi-query mode.  In 
  * multi-query mode, you may call addMilestone(q) to add a new milestone.
@@ -129,6 +171,7 @@ class PlannerInterface
   void dump(const char* fn);
 
   int index;
+  int spaceIndex;
 };
 
 #endif

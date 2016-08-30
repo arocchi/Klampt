@@ -4,8 +4,8 @@
 #include "Modeling/Interpolate.h"
 #include "TimeScaling.h"
 #include "ConstrainedInterpolator.h"
-#include <robotics/IKFunctions.h>
-#include <Timer.h>
+#include <KrisLibrary/robotics/IKFunctions.h>
+#include <KrisLibrary/Timer.h>
 #include <sstream>
 #include <fstream>
 
@@ -202,6 +202,10 @@ bool TimeOptimizePath(Robot& robot,const vector<Real>& oldtimes,const vector<Con
   traj.path.durations.resize(oldconfigs.size()-1);
   for(size_t i=0;i+1<oldconfigs.size();i++) {
     traj.path.durations[i] = oldtimes[i+1]-oldtimes[i];
+    if(!(traj.path.durations[i] > 0)) {
+      fprintf(stderr,"TimeOptimizePath: input path does not have monotonically increasing time: segment %d range [%g,%g]\n",i,oldtimes[i],oldtimes[i+1]);
+      return false;
+    }
     Assert(traj.path.durations[i] > 0);
   }
   traj.path.segments.resize(oldconfigs.size()-1);
@@ -349,7 +353,7 @@ bool InterpolateConstrainedMultiPath(Robot& robot,const MultiPath& path,vector<G
     //see if the resolution is high enough to just interpolate directly
     Real res=path.settings.as<Real>("resolution");
     if(res <= xtol) {
-      printf("Direct interpolating trajectory with res %g\n",res);
+      printf("InterpolateConstrainedMultiPath: Direct interpolating trajectory with res %g\n",res);
       //just interpolate directly
       RobotCSpace space(robot);
       RobotGeodesicManifold manifold(robot);
@@ -376,7 +380,7 @@ bool InterpolateConstrainedMultiPath(Robot& robot,const MultiPath& path,vector<G
       return true;
     }
   }
-  printf("Discretizing constrained trajectory at res %g\n",xtol);
+  printf("InterpolateConstrainedMultiPath: Discretizing constrained trajectory at res %g\n",xtol);
 
   RobotCSpace cspace(robot);
   RobotGeodesicManifold manifold(robot);
@@ -393,7 +397,7 @@ bool InterpolateConstrainedMultiPath(Robot& robot,const MultiPath& path,vector<G
     for(size_t j=0;j<stanceConstraints[i+1].size();j++) {
       bool res=AddGoalNonredundant(stanceConstraints[i+1][j],transitionConstraints[i]);
       if(!res) {
-	fprintf(stderr,"Conflict between goal %d of stance %d and stance %d\n",j,i+1,i);
+	fprintf(stderr,"InterpolateConstrainedMultiPath: Conflict between goal %d of stance %d and stance %d\n",j,i+1,i);
 	fprintf(stderr,"  Link %d\n",stanceConstraints[i+1][j].link);
 	return false;
       }
@@ -464,12 +468,14 @@ bool InterpolateConstrainedMultiPath(Robot& robot,const MultiPath& path,vector<G
       //Note: discretizeSpline will fill in the spline durations
     }
     else {
+      printf("Trying MultiSmoothInterpolate...\n");
       RobotSmoothConstrainedInterpolator interp(robot,stanceConstraints[i]);
+      interp.ftol = xtol*gConstraintToleranceScale;
       interp.xtol = xtol;
       if(!MultiSmoothInterpolate(interp,path.sections[i].milestones,dxprev,dxnext,paths[i])) {
 	/** TEMP - test no inter-section smoothing**/
 	//if(!MultiSmoothInterpolate(interp,path.sections[i].milestones,paths[i])) {
-	fprintf(stderr,"Unable to interpolate section %d\n",i);
+	fprintf(stderr,"InterpolateConstrainedMultiPath: Unable to interpolate section %d\n",i);
 	return false;
       }
     }
