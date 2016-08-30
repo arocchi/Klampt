@@ -196,7 +196,7 @@ class HandEmulator(CompliantHandEmulator):
         self.q_a_ref = np.array([1.0 - self.sigma_offset[i] - max(min(v, 1), 0) for i, v in enumerate(command) if i < self.a_dofs])
         self.q_d_ref = np.array([max(min(v, 1), 0) for i, v in enumerate(command) if
                         i >= self.a_dofs and i < self.a_dofs + self.d_dofs])
-        print command
+        #print command
 
 
     def getCommand(self):
@@ -348,11 +348,11 @@ if __name__=='__main__':
     world = WorldModel()
     if len(sys.argv) == 2:
         if not world.readFile(sys.argv[1]):
-            print "Could not load SoftHand hand from", sys.argv[1]
+            print "Could not load Reflex hand from", sys.argv[1]
             exit(1)
     else:
         if not world.readFile(klampt_model_name):
-            print "Could not load SoftHand hand from", klampt_model_name
+            print "Could not load Reflex hand from", klampt_model_name
             exit(1)
     viewer = HandSimGLViewer(world)
     viewer.run()
