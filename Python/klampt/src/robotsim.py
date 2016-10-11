@@ -982,7 +982,11 @@ class Geometry3D(_object):
         return _robotsim.Geometry3D_setCurrentTransform(self, *args)
 
     def getCurrentTransform(self):
-        """getCurrentTransform(Geometry3D self)"""
+        """
+        getCurrentTransform(Geometry3D self)
+
+        Gets the current transformation. 
+        """
         return _robotsim.Geometry3D_getCurrentTransform(self)
 
     def translate(self, *args):
@@ -3546,7 +3550,11 @@ class SimRobotController(_object):
         return _robotsim.SimRobotController_setPIDGains(self, *args)
 
     def getPIDGains(self):
-        """getPIDGains(SimRobotController self)"""
+        """
+        getPIDGains(SimRobotController self)
+
+        Gets the PID gains for the PID controller. 
+        """
         return _robotsim.SimRobotController_getPIDGains(self)
 
     __swig_setmethods__["index"] = _robotsim.SimRobotController_index_set

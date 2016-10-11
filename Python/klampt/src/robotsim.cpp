@@ -634,6 +634,7 @@ void Geometry3D::setElement(int element,const Geometry3D& rhs)
   SmartPointer<AnyCollisionGeometry3D>& rgeom = *reinterpret_cast<SmartPointer<AnyCollisionGeometry3D>*>(rhs.geomPtr);
   if(rgeom == NULL) 
     throw PyException("Setting an element to an empty geometry?");
+  rgeom->InitCollisionData();
 
   SmartPointer<AnyCollisionGeometry3D>& geom = *reinterpret_cast<SmartPointer<AnyCollisionGeometry3D>*>(geomPtr);
   if(!geom) 
@@ -3715,22 +3716,19 @@ void SimRobotController::setPIDGains(const std::vector<double>& kP,const std::ve
   }
 }
 
-void SimRobotController::getPIDGains(std::vector<double>& kP,std::vector<double>& kI,std::vector<double>& kD)
+void SimRobotController::getPIDGains(std::vector<double>& kPout,std::vector<double>& kIout,std::vector<double>& kDout)
 {
   RobotMotorCommand& command = controller->command;
   int size = command.actuators.size();
-  kP.resize(size, 0.0);
-  kI.resize(size, 0.0);
-  kD.resize(size, 0.0);
+  kPout.resize(size, 0.0);
+  kIout.resize(size, 0.0);
+  kDout.resize(size, 0.0);
   for(size_t i=0;i<command.actuators.size();i++) {
-    kP[i] = command.actuators[i].kP;
-    kI[i] = command.actuators[i].kI;
-    kD[i] = command.actuators[i].kD;
+    kPout[i] = command.actuators[i].kP;
+    kIout[i] = command.actuators[i].kI;
+    kDout[i] = command.actuators[i].kD;
   }
 }
-
-
-
 
 
 
