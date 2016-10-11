@@ -2761,6 +2761,20 @@ void RigidObjectModel::setTransform(const double R[9],const double t[3])
   obj->geometry->SetTransform(obj->T);
 }
 
+void RigidObjectModel::getVelocity(double out[3],double out2[3])
+{
+  RigidObject* obj=object;
+  obj->w.get(out);
+  obj->v.get(out2);
+}
+
+void RigidObjectModel::setVelocity(const double angularVelocity[3],const double velocity[3])
+{
+  RigidObject* obj=object;
+  obj->w.set(angularVelocity);
+  obj->v.set(velocity);
+}
+
 void RigidObjectModel::drawGL(bool keepAppearance)
 {
   RobotWorld& world = *worlds[this->world]->world;
