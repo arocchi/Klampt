@@ -42227,19 +42227,19 @@ SWIGINTERN PyObject *_wrap_SimRobotController_getPIDGains(PyObject *SWIGUNUSEDPA
   std::vector< double,std::allocator< double > > *arg4 = 0 ;
   void *argp1 = 0 ;
   int res1 = 0 ;
-  std::vector< double > temp12 ;
-  std::vector< double > temp23 ;
-  std::vector< double > temp34 ;
+  std::vector< double > temp2 ;
+  std::vector< double > temp3 ;
+  std::vector< double > temp4 ;
   PyObject * obj0 = 0 ;
   
   {
-    arg2 = &temp12;
+    arg2 = &temp2;
   }
   {
-    arg3 = &temp23;
+    arg3 = &temp3;
   }
   {
-    arg4 = &temp34;
+    arg4 = &temp4;
   }
   if (!PyArg_ParseTuple(args,(char *)"O:SimRobotController_getPIDGains",&obj0)) SWIG_fail;
   res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_SimRobotController, 0 |  0 );
@@ -42261,6 +42261,63 @@ SWIGINTERN PyObject *_wrap_SimRobotController_getPIDGains(PyObject *SWIGUNUSEDPA
     }
   }
   resultobj = SWIG_Py_Void();
+  {
+    PyObject *o, *o2, *o3;
+    o = convert_darray_obj(&(*arg2)[0],(int)arg2->size());
+    if ((!resultobj) || (resultobj == Py_None)) {
+      resultobj = o;
+    } else {
+      if (!PyTuple_Check(resultobj)) {
+        PyObject *o2 = resultobj;
+        resultobj = PyTuple_New(1);
+        PyTuple_SetItem(resultobj,0,o2);
+      }
+      o3 = PyTuple_New(1);
+      PyTuple_SetItem(o3,0,o);
+      o2 = resultobj;
+      resultobj = PySequence_Concat(o2,o3);
+      Py_DECREF(o2);
+      Py_DECREF(o3);
+    }
+  }
+  {
+    PyObject *o, *o2, *o3;
+    o = convert_darray_obj(&(*arg3)[0],(int)arg3->size());
+    if ((!resultobj) || (resultobj == Py_None)) {
+      resultobj = o;
+    } else {
+      if (!PyTuple_Check(resultobj)) {
+        PyObject *o2 = resultobj;
+        resultobj = PyTuple_New(1);
+        PyTuple_SetItem(resultobj,0,o2);
+      }
+      o3 = PyTuple_New(1);
+      PyTuple_SetItem(o3,0,o);
+      o2 = resultobj;
+      resultobj = PySequence_Concat(o2,o3);
+      Py_DECREF(o2);
+      Py_DECREF(o3);
+    }
+  }
+  {
+    PyObject *o, *o2, *o3;
+    o = convert_darray_obj(&(*arg4)[0],(int)arg4->size());
+    if ((!resultobj) || (resultobj == Py_None)) {
+      resultobj = o;
+    } else {
+      if (!PyTuple_Check(resultobj)) {
+        PyObject *o2 = resultobj;
+        resultobj = PyTuple_New(1);
+        PyTuple_SetItem(resultobj,0,o2);
+      }
+      o3 = PyTuple_New(1);
+      PyTuple_SetItem(o3,0,o);
+      o2 = resultobj;
+      resultobj = PySequence_Concat(o2,o3);
+      Py_DECREF(o2);
+      Py_DECREF(o3);
+    }
+  }
   return resultobj;
 fail:
   return NULL;
