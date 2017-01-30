@@ -227,6 +227,7 @@ ODESimulator::ODESimulator()
   dWorldSetERP(worldID,settings.errorReductionParameter);
   dWorldSetCFM(worldID,settings.dampedLeastSquaresParameter);
   dWorldSetGravity(worldID,settings.gravity[0],settings.gravity[1],settings.gravity[2]);
+  dWorldSetContactSurfaceLayer(worldID, 0.0005);
 }
 
 void ODESimulator::SetGravity(const Vector3& g)
